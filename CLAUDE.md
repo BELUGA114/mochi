@@ -4,14 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Static blog built from the [Fuwari](https://github.com/saicaca/fuwari) Astro template. The working tree is
-currently the unmodified template (single "Initial commit"), so `README.md`, `src/config.ts`,
-`astro.config.mjs`, and `docs/` still contain upstream's demo values.
+Static blog built from the [Fuwari](https://github.com/saicaca/fuwari) Astro template, live at
+<https://blog.cobweb11.top/> on Cloudflare Workers. Apart from the deployment config the tree is still
+close to upstream: `README.md`, `src/config.ts`, and `docs/` all still carry upstream's demo values.
 
 ## Commands
 
 pnpm only — `preinstall` runs `only-allow pnpm`, and `.npmrc` sets `manage-package-manager-versions=true`
-so Corepack pins the `packageManager` version (`pnpm@9.14.4`). Node >= 20; CI builds on 22 and 23.
+so Corepack pins the `packageManager` version (`pnpm@9.14.4`). Node >= 20; CI builds on 22 and 23, and
+`.nvmrc` pins 22 for the Cloudflare build image.
 
 | Command | Purpose |
 |:--|:--|
@@ -144,15 +145,37 @@ and `@/*` (→ `src/*`). The codebase mixes these with relative imports; prefer 
   even `client:only` fail `astro check` — hence the explicit empty `$props()` declaration there.
 - `Layout.astro` unconditionally overwrites its `banner` prop with `siteConfig.banner.src` (a `TODO`:
   per-post cover banners are disabled). Passing `banner` through `MainGridLayout` currently has no effect.
-- Before deploying, change `site` in `astro.config.mjs` (still `https://fuwari.vercel.app/`) and the demo
-  values in `src/config.ts`. `vercel.json` is an empty object.
+- `src/config.ts` still holds upstream's demo values (`title: "Fuwari"`, `subtitle: "Demo Site"`,
+  `lang: "en"`) even though the site is live. `site` in `astro.config.mjs` and the fallback in
+  `src/pages/rss.xml.ts` both point at `blog.cobweb11.top` — keep those two in sync.
 - Do not add `any` to the TypeScript here — `tsconfig` extends `astro/tsconfigs/strict` and `pnpm type-check`
   runs with `--isolatedDeclarations`.
+
+## Deployment
+
+Cloudflare Workers in static-assets mode — no adapter, no SSR. `wrangler.jsonc` declares
+`assets.directory: "./dist"` with no `main` entry point, plus the custom domain as a `routes` entry
+(`{ pattern: "blog.cobweb11.top", custom_domain: true }`), which requires the `cobweb11.top` zone to be in
+the same Cloudflare account. There is no `404.astro`, so Workers serves its default 404; adding one means
+also setting `assets.not_found_handling: "404-page"`.
+
+Cloudflare Workers Builds is wired to the GitHub repo and deploys on push to `main`:
+
+- Build command is **`pnpm build`**, *not* the `npx astro build` from Astro's Cloudflare guide. That one
+  skips `pagefind --site dist`, so `dist/pagefind/` is never generated and `window.pagefind` stays
+  undefined in production — search fails silently while every page still renders fine.
+- Deploy command is `npx wrangler deploy`; `wrangler` is a pinned devDependency so it resolves locally.
+- `.nvmrc` selects Node 22 for the build image. If a build log shows a different version, add a
+  `NODE_VERSION=22` environment variable in the dashboard.
+
+`./node_modules/.bin/wrangler deploy --dry-run` validates `wrangler.jsonc` and reports the asset count
+without logging in or uploading anything.
 
 ## CI
 
 `.github/workflows/build.yml` — `pnpm astro check` and `pnpm astro build` on a Node 22/23 matrix,
 `pnpm install --frozen-lockfile`, concurrency-cancelling, on push/PR to `main`.
 `.github/workflows/biome.yml` — `biome ci ./src --reporter=github` using `biome@latest` from
-`biomejs/setup-biome`, which can drift from the pinned `@biomejs/biome` 2.2.5 devDependency and fail CI on
+`biomejs/setup-biome`, which can drift from the pinned `@biomejs/biome` 2.5.10 devDependency and fail CI on
 rules that pass locally.
+Neither workflow deploys — publishing is Cloudflare's Workers Builds, triggered by the same pushes.
