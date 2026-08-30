@@ -11,6 +11,12 @@ import {
 import { onMount } from "svelte";
 import type { LIGHT_DARK_MODE } from "@/types/config.ts";
 
+// This component takes no props. Declaring an empty props type is still required:
+// a runes-mode component without `$props()` is typed as `Record<string, never>`,
+// whose index signature makes Astro's `client:*` directives fail type checking.
+// biome-ignore lint/correctness/noEmptyPattern: no props to destructure, only the type matters
+let {}: Record<never, never> = $props();
+
 const seq: LIGHT_DARK_MODE[] = [LIGHT_MODE, DARK_MODE, AUTO_MODE];
 let mode: LIGHT_DARK_MODE = $state(AUTO_MODE);
 
