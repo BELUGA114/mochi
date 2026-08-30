@@ -22,6 +22,9 @@ pnpm-debug.log*
 
 .vercel
 
+# wrangler 本地状态与缓存
+.wrangler/
+
 package-lock.json
 bun.lockb
 yarn.lock

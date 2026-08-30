@@ -1,0 +1,14 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "mochi",
+	// 锁定 Workers 运行时行为的基准日期，升级 wrangler 时不要随手改动
+	"compatibility_date": "2026-08-30",
+	"routes": [
+		// 自定义域名，要求 cobweb11.top 这个 zone 在同一个 Cloudflare 账户下
+		{ "pattern": "blog.cobweb11.top", "custom_domain": true }
+	],
+	"assets": {
+		// 纯静态站点：只上传 astro build + pagefind 的产物，不需要 main 入口
+		"directory": "./dist"
+	}
+}
