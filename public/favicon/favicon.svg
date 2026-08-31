@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+	<title>mochi</title>
+	<!--
+		Base colors live on the `fill` attributes so renderers that ignore CSS
+		(link-preview crawlers, ImageMagick's own rasterizer) still get the right
+		artwork; the stylesheet below only refines the plate for dark tab bars.
+		The plate stays an opaque mid-blue in both schemes, so the mark is legible
+		even when `prefers-color-scheme` is never resolved.
+	-->
+	<style>
+		@media (prefers-color-scheme: dark) {
+			.plate { fill: #6a82e8 }
+		}
+	</style>
+	<rect class="plate" width="32" height="32" rx="7.25" fill="#4a61d8"/>
+	<path fill="#fff" d="M14.635 7.464A9 9 0 1 0 25.536 18.365A8 8 0 0 1 14.635 7.464Z"/>
+</svg>

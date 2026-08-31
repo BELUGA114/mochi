@@ -42,6 +42,10 @@ export type Favicon = {
 	src: string;
 	theme?: "light" | "dark";
 	sizes?: string;
+	/** MIME type of the icon, e.g. 'image/svg+xml'. Lets browsers skip formats they cannot render. */
+	type?: string;
+	/** Link relation, defaults to 'icon'. Use 'apple-touch-icon' for the iOS home-screen icon. */
+	rel?: string;
 };
 
 export enum LinkPreset {

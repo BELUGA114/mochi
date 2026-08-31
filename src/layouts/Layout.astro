@@ -102,8 +102,9 @@ const bannerOffset =
 		<meta name="viewport" content="width=device-width" />
 		<meta name="generator" content={Astro.generator} />
 		{favicons.map(favicon => (
-			<link rel="icon"
+			<link rel={favicon.rel ?? 'icon'}
 				  href={favicon.src.startsWith('/') ? url(favicon.src) : favicon.src}
+				  type={favicon.type}
 				  sizes={favicon.sizes}
 				  media={favicon.theme && `(prefers-color-scheme: ${favicon.theme})`}
 			/>
