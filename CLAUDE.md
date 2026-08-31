@@ -137,14 +137,28 @@ and `@/*` (→ `src/*`). The codebase mixes these with relative imports; prefer 
   understand those files. `src/**/*.css` is excluded from Biome.
 - On a Windows checkout with `core.autocrlf=true`, `biome ci ./src` reports *every* file as unformatted —
   Biome's `lineEnding` defaults to `lf` while the working tree is CRLF. This is a local-only artifact; CI
-  runs on Linux and sees LF. To check formatting of a specific file the way CI does, normalize first:
-  `tr -d '\r' < <file> | ./node_modules/.bin/biome format --stdin-file-path=<file>` and diff the output.
-  Use `biome lint ./src` (no formatter) for a trustworthy local lint signal.
+  runs on Linux and sees LF. Never "fix" it by running `pnpm lint` (`biome check --write ./src`) or
+  `pnpm format`: against a CRLF tree those rewrite all 65 files. Use `biome lint ./src` (no formatter) for
+  a trustworthy local lint signal.
+- To reproduce the Code quality workflow exactly, check an *unconverted* export of the committed tree:
+  `git -c core.autocrlf=false archive HEAD | tar -x -C /tmp/mochi-ci`, then
+  `cd /tmp/mochi-ci && <repo>/node_modules/.bin/biome ci ./src`. Plain `git archive` is not enough — it
+  applies `autocrlf` and reproduces the same false positives. For one uncommitted file,
+  `tr -d '\r' < <file> | ./node_modules/.bin/biome format --stdin-file-path=<file>` and diff against the
+  normalized input — but never write that output back to disk: on sources with combining marks
+  (`src/i18n/languages/th.ts`) it silently drops Thai tone marks such as U+0E49.
+- `biome ci` fails only on errors; lint *warnings* (currently `useOptionalChain` in
+  `rehype-component-github-card.mjs`) are annotated but do not fail the workflow. When it does fail, the
+  `--reporter=github` job log does not name the file — read the annotations instead:
+  `gh api repos/:owner/:repo/actions/runs/<run-id>/jobs --jq '.jobs[0].id'`, then
+  `gh api repos/:owner/:repo/check-runs/<job-id>/annotations`.
 - `LightDarkSwitch.svelte` is the only Svelte component in runes mode; the others use legacy `export let` /
   `$:`. A runes component with no `$props()` is typed `Record<string, never>`, whose index signature makes
   even `client:only` fail `astro check` — hence the explicit empty `$props()` declaration there.
 - `Layout.astro` unconditionally overwrites its `banner` prop with `siteConfig.banner.src` (a `TODO`:
-  per-post cover banners are disabled). Passing `banner` through `MainGridLayout` currently has no effect.
+  per-post cover banners are disabled). Passing `banner` through `MainGridLayout` currently has no effect —
+  the post cover still reaches the `<head>` as `og:image`, but through the separate `ogImage` prop resolved
+  by `src/utils/og-utils.ts`.
 - `src/config.ts` still holds upstream's demo values (`title: "Fuwari"`, `subtitle: "Demo Site"`,
   `lang: "en"`) even though the site is live. `site` in `astro.config.mjs` and the fallback in
   `src/pages/rss.xml.ts` both point at `blog.cobweb11.top` — keep those two in sync.
