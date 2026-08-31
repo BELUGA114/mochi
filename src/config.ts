@@ -37,6 +37,7 @@ export const siteConfig: SiteConfig = {
 		//   sizes: '32x32',              // (Optional) Size of the favicon, set only if you have favicons of different sizes
 		// }
 	],
+	ogImage: "/og.jpg", // Fallback social preview image, 1200x630 recommended. Relative to /public when it starts with '/'
 };
 
 export const navBarConfig: NavBarConfig = {

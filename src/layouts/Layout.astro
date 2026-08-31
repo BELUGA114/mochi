@@ -17,6 +17,7 @@ import {
 } from "../constants/constants";
 import { defaultFavicons } from "../constants/icon";
 import type { Favicon } from "../types/config";
+import { type OgImage, resolveOgImage } from "../utils/og-utils";
 import { pathsEqual, url } from "../utils/url-utils";
 import "katex/dist/katex.css";
 
@@ -26,9 +27,11 @@ interface Props {
 	description?: string;
 	lang?: string;
 	setOGTypeArticle?: boolean;
+	ogImage?: OgImage;
 }
 
-let { title, banner, description, lang, setOGTypeArticle } = Astro.props;
+let { title, banner, description, lang, setOGTypeArticle, ogImage } =
+	Astro.props;
 
 // apply a class to the body element to decide the height of the banner, only used for initial page load
 // Swup can update the body for each page visit, but it's after the page transition, causing a delay for banner height change
@@ -56,6 +59,16 @@ if (title) {
 
 const favicons: Favicon[] =
 	siteConfig.favicon.length > 0 ? siteConfig.favicon : defaultFavicons;
+
+// 社交预览图分层回退：页面自带封面优先，没有则用站点默认图
+if (!ogImage) {
+	ogImage = await resolveOgImage(siteConfig.ogImage);
+}
+// 抓取器基本不解析相对路径，og:image 必须给绝对 URL
+let ogImageUrl: string | undefined;
+if (ogImage) {
+	ogImageUrl = Astro.site ? new URL(ogImage.src, Astro.site).href : ogImage.src;
+}
 
 // const siteLang = siteConfig.lang.replace('_', '-')
 if (!lang) {
@@ -93,11 +106,20 @@ const bannerOffset =
         ) : (
         <meta property="og:type" content="website" />
         )}
+		{ogImageUrl && (
+		<Fragment>
+			<meta property="og:image" content={ogImageUrl}>
+			{ogImage?.width && <meta property="og:image:width" content={String(ogImage.width)}>}
+			{ogImage?.height && <meta property="og:image:height" content={String(ogImage.height)}>}
+			<meta property="og:image:alt" content={pageTitle}>
+		</Fragment>
+		)}
 
 		<meta name="twitter:card" content="summary_large_image">
 		<meta property="twitter:url" content={Astro.url}>
 		<meta name="twitter:title" content={pageTitle}>
 		<meta name="twitter:description" content={description || pageTitle}>
+		{ogImageUrl && <meta name="twitter:image" content={ogImageUrl}>}
 
 		<meta name="viewport" content="width=device-width" />
 		<meta name="generator" content={Astro.generator} />

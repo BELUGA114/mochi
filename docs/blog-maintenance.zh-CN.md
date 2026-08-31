@@ -136,8 +136,12 @@ links: [
   它走的是完整 Markdown 管线，所以提示框、GitHub 卡片、公式这些扩展语法都能用。
 - 页脚的 `Powered by Astro & Fuwari` 和 RSS / Sitemap 链接写死在
   `src/components/Footer.astro`，要改得动组件本身。
-- 社交预览图（`og:image`）**目前完全没有**，分享到微信/Twitter 不会带图。想要的话需要在
-  `src/layouts/Layout.astro` 的 `<head>` 里自己加 `og:image`。
+- 社交预览图（`og:image`）走**分层回退**：文章有 `image` 封面就用封面，其余页面用
+  `src/config.ts` 的 `ogImage`（当前 `/og.jpg`，1200x630）。换默认图就替换 `public/og.jpg`，
+  或把 `ogImage` 改成别的路径 —— 写法和 `banner.src` 一致（`/` 开头相对 `public/`，否则相对 `src/`，
+  也可以填 `http(s)://` 外链）；留空则整组标签都不输出。
+  解析在 `src/utils/og-utils.ts`，标签在 `src/layouts/Layout.astro` 的 `<head>` 里输出，
+  都会被拼成绝对 URL（抓取器不认相对路径）。
 
 ---
 
@@ -176,7 +180,7 @@ URL slug 就是文件名（或目录名），改文件名等于换 URL，老链�
 | `published` | 是 | 发布日期，`2024-05-01` 或完整 ISO 时间。**全站排序、归档分年都按它** |
 | `updated` | 否 | 更新日期。只有与 `published` 不同才会显示，且只显示在文章页（列表卡片上隐藏） |
 | `description` | 否 | 列表卡片和 `og:description` 用。**留空时会自动截取正文开头当摘要** |
-| `image` | 否 | 封面图，显示在列表卡片右侧和文章正文上方 |
+| `image` | 否 | 封面图，显示在列表卡片右侧和文章正文上方，同时作为这篇文章的社交预览图（`og:image`） |
 | `tags` | 否 | 字符串数组 |
 | `category` | 否 | 单个字符串，留空/`null` 归入“未分类” |
 | `draft` | 否 | `true` = 草稿，见下 |

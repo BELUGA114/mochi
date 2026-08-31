@@ -36,6 +36,13 @@ export type SiteConfig = {
 	};
 
 	favicon: Favicon[];
+
+	/**
+	 * Default social preview image (`og:image`), used for every page that has no cover of its own.
+	 * Same path rules as `banner.src`: relative to /src, or relative to /public if it starts with '/'.
+	 * An `http(s)://` URL is used as is. Leave it out to emit no `og:image` at all.
+	 */
+	ogImage?: string;
 };
 
 export type Favicon = {
