@@ -1,7 +1,8 @@
 ---
-title: 境外 VPS 上的分流，别拿一份表回答另一个问题
+title: VPS 上的分流，别拿一份表回答另一个问题
 published: 2026-08-30
-description: geosite 的 cn 表是为「境内客户端该用哪个解析器」建的，把它搬到境外服务端做境内外出站判定，误判是普遍存在的。境内外交给 IP 判定，域名表只用来选解析器。
+description: geosite 的 cn 表是为「客户端该用哪个解析器」建的，把它搬到境外服务端做境内外出站判定，误判是普遍存在的。境内外交给 IP 判定，域名表只用来选解析器。
+image: "./cover.png"
 tags: [Xray, 分流, DNS, VPS]
 category: 网络
 draft: false
@@ -40,11 +41,11 @@ draft: false
 
 ## geosite 的 cn 表里都收了什么
 
-Xray 官方文档对这张表的说法是「大杂烩，只要沾点中国关系的都往里丢」（[routing-with-dns](https://xtls.github.io/document/level-1/routing-with-dns.html)）。
+Xray 官方的教程对这张表的描述是「大杂烩，只要沾点中国关系的都往里丢」（[用 DNS 实现精准境内外分流](https://xtls.github.io/document/level-1/routing-with-dns.html)）。
 
 把两张表拉出来对一遍，能看到不少域名同时命中：
 
-```text title="同时出现在 cn 与 geolocation-!cn 里的域名" {4}
+```text title="同时出现在 cn 与 geolocation-!cn 里的域名"
 CN                full:www.gstatic.com
 CN                full:www.apple.com
 CN                full:init.itunes.apple.com
@@ -90,7 +91,7 @@ GEOLOCATION-!CN   domain:c.pki.goog
 
 由此有两个推论容易踩，客户端服务端都成立。
 
-一是 IP 规则不命中并不代表规则失效。`www.jd.com` 用境外解析器拿到的是 `140.150.36.51`，京东的海外边缘节点，这个地址本来就不在境内 IP 表里，`geoip:cn` 那条当然不触发。总有人以为是分流没生效，然后跑去改 DNS 想把它「修好」。
+一是 IP 规则不命中并不代表规则失效。`www.jd.com` 用境外解析器拿到的是 `140.150.36.51`，京东的海外边缘节点，这个地址本来就不在境内 IP 表里，`geoip:cn` 那条当然不触发。不要认为是分流没生效，然后跑去改 DNS 想把它「修好」。
 
 二是指向默认出站的例外规则，等于把排在它后面的检查全关掉了。规则表末尾总有一个兜底出站，例外规则如果指的正是那一侧，它要么纯属冗余，要么就是抢在真正的判定规则之前把判定跳过。给 `gstatic.com` 加一条直连例外去治「它被 geosite 当成 cn 域名」这个症状，属于后者，从此这个域名的连接根本不看目的 IP。
 
@@ -149,7 +150,13 @@ Xray 的 `finalQuery` 为真的时候后面的解析器不再参与，而过滤�
 
 要让 DNS 层真的帮上忙，办法是把精确的列表排在宽列表前面，让它先接管。Xray 构建解析器列表的顺序是：命中 `domains` 条件的解析器按配置顺序排在前面，其余没标 `skipFallback` 的按配置顺序追加，第一个产出非空结果的解析器终止查询。所以只要把精确列表挂在一个不带过滤的解析器上并排在宽列表之前，过滤和截断都用不着出现。
 
-<iframe src="https://mermaid.live/embed?theme=dark&look=classic&mode=dark#pako:eNqFks1OwkAUhV9lctflBbowEcrPA7jCcTGhFQiUkgIrIDFGozHB1IiJIj82ouJCiC4US5CX6bT1LZwp1rQudHZzc-45370zTchpsgIi5HVSLaAtCeu4gtjZ3Mbgzd6c5306GlGjg2EHxWIbKN7EQM-W9vzJfflwzalnTjC0g64417QwOJczDC2U8E3umIbO3qnVdXsH3sOtMzTo1URA9rxDT2681ZGzGDP7wCPh52R566pLr4cCosdjOu25i3NnMAoJgzBq3PMw6YeMTpdRLCmKlfwDK-Sf9EFSzJZHD_ufez0Gu-Z1Bqa9eA1FpKIR2d_1dRs1Tu255T5aXJNmGGw-z1iGQqXoUOmgnvZhMrzlsE-ti__3mFnvEQT2tkUZxLreUARQFV0l_ApsrnpBURUMIgaZ6CUMAoayppX8Sq5MarVijo3IHKqkktU0NTDRtUa-AOIuKdfYrVGVSV2RioT9oW9J-wvwiQTT" width="100%" height="480" style="border:0" loading="lazy" title="Mermaid diagram" sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"></iframe>
+<iframe
+  src="https://mermaideditor.com/embed?code=Z3JhcGglMjBURCUwQSUyMCUyMCUyMCUyMEElNUIlMjIlRTglQUYlQjclRTYlQjElODIlRTUlOUYlOUYlRTUlOTAlOEQlMjIlNUQlMjAtLSUzRSUyMEIlN0IlMjIlRTUlOTElQkQlRTQlQjglQUQlRTclQjIlQkUlRTclQTElQUUlRTglQTElQTglMjIlN0QlMEElMjAlMjAlMjAlMjBCJTIwLS0lM0UlN0MlMjIlRTYlOTglQUYlMjIlN0MlMjBDJTVCJTIyJUU4JUFGJUE1JUU4JUExJUE4JUU1JUFGJUI5JUU1JUJBJTk0JUU3JTlBJTg0JUU4JUE3JUEzJUU2JTlFJTkwJUU1JTk5JUE4JTJDJTIwJUU0JUI4JThEJUU1JThBJUEwJUU4JUJGJTg3JUU2JUJCJUE0JTIyJTVEJTBBJTIwJTIwJTIwJTIwQyUyMC0tJTNFJTIwWiU1QiUyMiVFOCVCRiU5NCVFNSU5QiU5RSUyQyUyMCVFNSU4OCVBNCVFNSVBRSU5QSVFNyVCQiU5MyVFNiU5RCU5RiUyMiU1RCUwQSUyMCUyMCUyMCUyMEIlMjAtLSUzRSU3QyUyMiVFNSU5MCVBNiUyMiU3QyUyMEQlN0IlMjIlRTUlOTElQkQlRTQlQjglQUQlRTUlQUUlQkQlRTglQTElQTglMjIlN0QlMEElMjAlMjAlMjAlMjBEJTIwLS0lM0UlN0MlMjIlRTYlOTglQUYlMjIlN0MlMjBFJTVCJTIyJUU4JUFGJUE1JUU4JUExJUE4JUU1JUFGJUI5JUU1JUJBJTk0JUU3JTlBJTg0JUU4JUE3JUEzJUU2JTlFJTkwJUU1JTk5JUE4JTIyJTVEJTBBJTIwJTIwJTIwJTIwRSUyMC0tJTNFJTIwRiU3QiUyMiVFNyVCQiU5MyVFNiU5RSU5QyVFOSU4MCU5QSVFOCVCRiU4NyVFOCVCRiU4NyVFNiVCQiVBNCVFNiU5RCVBMSVFNCVCQiVCNiUyMiU3RCUwQSUyMCUyMCUyMCUyMEYlMjAtLSUzRSU3QyUyMiVFNiU5OCVBRiUyMiU3QyUyMFolMEElMjAlMjAlMjAlMjBGJTIwLS0lM0UlN0MlMjIlRTglQkYlODclRTYlQkIlQTQlRTUlOTAlOEUlRTQlQjglQkElRTclQTklQkElMjIlN0MlMjBHJTVCJTIyJUU1JTlCJTlFJUU4JTkwJUJEJTIyJTVEJTBBJTIwJTIwJTIwJTIwRCUyMC0tJTNFJTdDJTIyJUU1JTkwJUE2JTIyJTdDJTIwRyUwQSUyMCUyMCUyMCUyMEclMjAtLSUzRSUyMEglNUIlMjIlRTUlODUlOUMlRTUlQkElOTUlRTglQTclQTMlRTYlOUUlOTAlRTUlOTklQTglMkMlMjAlRTQlQjglOEQlRTUlOEElQTAlRTglQkYlODclRTYlQkIlQTQlMjIlNUQlMEElMjAlMjAlMjAlMjBIJTIwLS0lM0UlMjBa&theme=neutral"
+  width="100%"
+  height="650"
+  frameborder="0"
+  style="border-radius:8px;overflow:hidden"
+></iframe>
 
 :::caution[`enableParallelQuery` 会破坏这里依赖的顺序语义]
 这套做法整个建立在顺序语义上。Xray 的 `enableParallelQuery` 打开之后会改成按分组并发，相邻且 `clientIP`、`skipFallback`、`queryStrategy`、`tag`、`domains`、过滤条件全都相同的服务器合成一组，组内谁先成功就用谁的地址，只有组间才按顺序回落。开了它，前面那一条就不一定排得到前面去，两个别一起用。
@@ -170,7 +177,7 @@ dnsmasq-china-list 要回答的问题本身就是「哪些域名用境内解析�
 所以要问的既然是「用哪个解析器」，就该找一份为「用哪个解析器」建的表，而不是让一份为出站分流建的表来兼职。给通用列表打补丁，只能修掉已经发现的条目；换一份对题的列表，能连还没发现的一起修掉。
 
 :::tip[关于精确表怎么设计]
-外国 CA 那三条 OCSP 域名性质不一样，值得分开看：
+外国 CA 那三条 OCSP 域名的收录情况不太一样：
 
 - `ocsp.globalsign.com`，`cn` 和 `china-list` 都收，必须单列。
 - `c.pki.goog`，`cn` 收（`full:c.pki.goog`）而 `china-list` 不收，换表就够了，留着是防以后漂移。
@@ -185,9 +192,9 @@ dnsmasq-china-list 要回答的问题本身就是「哪些域名用境内解析�
 "dns": {
   "queryStrategy": "UseIPv4",
   "servers": [
-    // 第一条，精确表前置：外国公司在境内提供服务的那批子表，交给境外解析器，不加过滤。
-    // 有人会问这条是不是多余的，毕竟下面用的 china-list 本来就不收 Apple 和 Google。
-    // 不多余：它挡的是上游列表以后的漂移，而 china-list 确实收 ocsp.globalsign.com。
+    // 精确表前置：外国公司在境内提供服务的那批子表，交给境外解析器，不加过滤。
+    // 这是多余的吗，毕竟下面用的 china-list 本来就不收 Apple 和 Google。
+    // 这是在未雨绸缪，预防上游列表以后的漂移。
     {
       "address": "https://1.1.1.1/dns-query",
       "tag": "dns-foreign-in-cn",
@@ -197,7 +204,7 @@ dnsmasq-china-list 要回答的问题本身就是「哪些域名用境内解析�
       ],
       "skipFallback": true            // 只服务命中的域名，不参与其他域名的回落
     },
-    // 第二条，境内解析器。finalQuery 必须保持 false：expectedIPs 过滤到空时得有下一条来兜。
+    // 境内解析器：finalQuery 必须保持 false：expectedIPs 过滤到空时得有下一条来兜。
     // clientIP 是 per-server 的 EDNS Client Subnet 字段（全局那个键叫 clientIp），
     // 只有需要境内服务解析到大陆地址时才加，代价见下面一段。
     {
@@ -299,6 +306,7 @@ while read -r d; do curl -sI --max-time 5 "https://$d" >/dev/null; done < domain
 
 - 先确认社区建这张表要解决的问题，和自己的需求是不是一回事。
 - 服务端对境内外的判定适合用 IP，选解析器才用域名表，而且要用专为选解析器而建的表。
+- 对于服务端,IP 是比通用域名分类更合适的判据，但它仍然受 DNS、CDN、多地址、缓存、时序影响。
 
 这样列表滞后带来的后果，就从「某天某个域名会走错，而且可能是有风险的那个方向」变成「某天某个域名会慢一点，扫一遍日志就能发现」。
 
@@ -306,7 +314,7 @@ while read -r d; do curl -sI --max-time 5 "https://$d" >/dev/null; done < domain
 
 `warp` 是保守侧的中转出站，`direct` 是默认出站。
 
-```json title="config.json（完整）" showLineNumbers collapse={5-23, 29-33} {46, 48}
+```json title="config.json（完整）" showLineNumbers collapse={5-23, 29-33}
 {
   "dns": {
     "queryStrategy": "UseIPv4",
@@ -361,9 +369,3 @@ while read -r d; do curl -sI --max-time 5 "https://$d" >/dev/null; done < domain
   ]
 }
 ```
-
-
-
-
-
-
