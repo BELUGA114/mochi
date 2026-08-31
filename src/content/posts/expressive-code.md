@@ -1,27 +1,27 @@
 ---
-title: Expressive Code Example
+title: Expressive Code 示例
 published: 2024-04-10
-description: How code blocks look in Markdown using Expressive Code.
-tags: [Markdown, Blogging, Demo]
-category: Examples
+description: 使用 Expressive Code 后，Markdown 中的代码块是什么样子。
+tags: [Markdown, 博客写作, 演示]
+category: 示例
 draft: false
 ---
 
-Here, we'll explore how code blocks look using [Expressive Code](https://expressive-code.com/). The provided examples are based on the official documentation, which you can refer to for further details.
+下面来看看借助 [Expressive Code](https://expressive-code.com/) 渲染出来的代码块效果。这里的示例都来自官方文档，需要了解更多细节可以直接查阅官方文档。
 
 ## Expressive Code
 
-### Syntax Highlighting
+### 语法高亮
 
 [Syntax Highlighting](https://expressive-code.com/key-features/syntax-highlighting/)
 
-#### Regular syntax highlighting
+#### 普通语法高亮
 
 ```js
-console.log('This code is syntax highlighted!')
+console.log('这段代码带有语法高亮！')
 ```
 
-#### Rendering ANSI escape sequences
+#### 渲染 ANSI 转义序列
 
 ```ansi
 ANSI colors:
@@ -40,79 +40,79 @@ Full RGB colors:
 Text formatting: [1mBold[0m [2mDimmed[0m [3mItalic[0m [4mUnderline[0m
 ```
 
-### Editor & Terminal Frames
+### 编辑器与终端窗框
 
 [Editor & Terminal Frames](https://expressive-code.com/key-features/frames/)
 
-#### Code editor frames
+#### 编辑器窗框
 
 ```js title="my-test-file.js"
-console.log('Title attribute example')
+console.log('title 属性示例')
 ```
 
 ---
 
 ```html
 <!-- src/content/index.html -->
-<div>File name comment example</div>
+<div>文件名注释示例</div>
 ```
 
-#### Terminal frames
+#### 终端窗框
 
 ```bash
-echo "This terminal frame has no title"
+echo "这个终端窗框没有标题"
 ```
 
 ---
 
-```powershell title="PowerShell terminal example"
-Write-Output "This one has a title!"
+```powershell title="PowerShell 终端示例"
+Write-Output "这个就有标题了！"
 ```
 
-#### Overriding frame types
+#### 覆盖窗框类型
 
 ```sh frame="none"
-echo "Look ma, no frame!"
+echo "快看，没有窗框！"
 ```
 
 ---
 
 ```ps frame="code" title="PowerShell Profile.ps1"
-# Without overriding, this would be a terminal frame
+# 如果不覆盖类型，这里会被渲染成终端窗框
 function Watch-Tail { Get-Content -Tail 20 -Wait $args }
 New-Alias tail Watch-Tail
 ```
 
-### Text & Line Markers
+### 文本与行标记
 
 [Text & Line Markers](https://expressive-code.com/key-features/text-markers/)
 
-#### Marking full lines & line ranges
+#### 标记整行与行区间
 
 ```js {1, 4, 7-8}
-// Line 1 - targeted by line number
-// Line 2
-// Line 3
-// Line 4 - targeted by line number
-// Line 5
-// Line 6
-// Line 7 - targeted by range "7-8"
-// Line 8 - targeted by range "7-8"
+// 第 1 行 —— 由行号选中
+// 第 2 行
+// 第 3 行
+// 第 4 行 —— 由行号选中
+// 第 5 行
+// 第 6 行
+// 第 7 行 —— 由区间 "7-8" 选中
+// 第 8 行 —— 由区间 "7-8" 选中
 ```
 
-#### Selecting line marker types (mark, ins, del)
+#### 选择行标记类型（mark、ins、del）
 
 ```js title="line-markers.js" del={2} ins={3-4} {6}
 function demo() {
-  console.log('this line is marked as deleted')
-  // This line and the next one are marked as inserted
-  console.log('this is the second inserted line')
+  console.log('这一行被标记为已删除')
+  // 这一行和下一行被标记为新增
+  console.log('这是第二行新增内容')
 
-  return 'this line uses the neutral default marker type'
+  return '这一行使用中性的默认标记类型'
 }
 ```
 
-#### Adding labels to line markers
+#### 为行标记添加标签
 
 ```jsx {"1":5} del={"2":7-8} ins={"3":10-12}
 // labeled-line-markers.jsx
@@ -130,9 +130,9 @@ function demo() {
 </button>
 ```
 
-#### Adding long labels on their own lines
+#### 让较长的标签单独占一行
 
-```jsx {"1. Provide the value prop here:":5-6} del={"2. Remove the disabled and active states:":8-10} ins={"3. Add this to render the children inside the button:":12-15}
+```jsx {"1. 在这里传入 value 属性：":5-6} del={"2. 移除 disabled 与 active 状态：":8-10} ins={"3. 加上这段以在按钮内渲染子元素：":12-15}
 // labeled-line-markers.jsx
 <button
   role="button"
@@ -151,12 +151,12 @@ function demo() {
 </button>
 ```
 
-#### Using diff-like syntax
+#### 使用类 diff 语法
 
 ```diff
-+this line will be marked as inserted
--this line will be marked as deleted
-this is a regular line
++这一行会被标记为新增
+-这一行会被标记为删除
+这是普通的一行
 ```
 
 ---
@@ -165,147 +165,147 @@ this is a regular line
 --- a/README.md
 +++ b/README.md
 @@ -1,3 +1,4 @@
-+this is an actual diff file
--all contents will remain unmodified
- no whitespace will be removed either
++这是一个真正的 diff 文件
+-所有内容都会保持原样
+ 行首的空白也不会被移除
 ```
 
-#### Combining syntax highlighting with diff-like syntax
+#### 将语法高亮与类 diff 语法结合
 
 ```diff lang="js"
   function thisIsJavaScript() {
-    // This entire block gets highlighted as JavaScript,
-    // and we can still add diff markers to it!
--   console.log('Old code to be removed')
-+   console.log('New and shiny code!')
+    // 整个代码块都会按 JavaScript 高亮，
+    // 同时还能给它加上 diff 标记！
+-   console.log('要删掉的旧代码')
++   console.log('崭新又漂亮的代码！')
   }
 ```
 
-#### Marking individual text inside lines
+#### 标记行内的指定文本
 
-```js "given text"
+```js "指定文本"
 function demo() {
-  // Mark any given text inside lines
-  return 'Multiple matches of the given text are supported';
+  // 可以标记行内任意指定文本
+  return '支持匹配多处相同的指定文本';
 }
 ```
 
-#### Regular expressions
+#### 正则表达式
 
 ```ts /ye[sp]/
-console.log('The words yes and yep will be marked.')
+console.log('单词 yes 和 yep 都会被标记。')
 ```
 
-#### Escaping forward slashes
+#### 转义斜杠
 
 ```sh /\/ho.*\//
 echo "Test" > /home/test.txt
 ```
 
-#### Selecting inline marker types (mark, ins, del)
+#### 选择行内标记类型（mark、ins、del）
 
-```js "return true;" ins="inserted" del="deleted"
+```js "return true;" ins="插入" del="删除"
 function demo() {
-  console.log('These are inserted and deleted marker types');
-  // The return statement uses the default marker type
+  console.log('这里演示的是 插入 和 删除 两种标记类型');
+  // return 语句使用默认的标记类型
   return true;
 }
 ```
 
-### Word Wrap
+### 自动换行
 
 [Word Wrap](https://expressive-code.com/key-features/word-wrap/)
 
-#### Configuring word wrap per block
+#### 为单个代码块配置自动换行
 
 ```js wrap
-// Example with wrap
+// 开启 wrap 的示例
 function getLongString() {
-  return 'This is a very long string that will most probably not fit into the available space unless the container is extremely wide'
+  return '这是一个很长很长的字符串，除非容器特别宽，否则它几乎肯定塞不进可用的空间里'
 }
 ```
 
 ---
 
 ```js wrap=false
-// Example with wrap=false
+// wrap=false 的示例
 function getLongString() {
-  return 'This is a very long string that will most probably not fit into the available space unless the container is extremely wide'
+  return '这是一个很长很长的字符串，除非容器特别宽，否则它几乎肯定塞不进可用的空间里'
 }
 ```
 
-#### Configuring indentation of wrapped lines
+#### 配置换行后的缩进
 
 ```js wrap preserveIndent
-// Example with preserveIndent (enabled by default)
+// preserveIndent 的示例（默认启用）
 function getLongString() {
-  return 'This is a very long string that will most probably not fit into the available space unless the container is extremely wide'
+  return '这是一个很长很长的字符串，除非容器特别宽，否则它几乎肯定塞不进可用的空间里'
 }
 ```
 
 ---
 
 ```js wrap preserveIndent=false
-// Example with preserveIndent=false
+// preserveIndent=false 的示例
 function getLongString() {
-  return 'This is a very long string that will most probably not fit into the available space unless the container is extremely wide'
+  return '这是一个很长很长的字符串，除非容器特别宽，否则它几乎肯定塞不进可用的空间里'
 }
 ```
 
-## Collapsible Sections
+## 可折叠区块
 
 [Collapsible Sections](https://expressive-code.com/plugins/collapsible-sections/)
 
 ```js collapse={1-5, 12-14, 21-24}
-// All this boilerplate setup code will be collapsed
+// 这些样板初始化代码都会被折叠起来
 import { someBoilerplateEngine } from '@example/some-boilerplate'
 import { evenMoreBoilerplate } from '@example/even-more-boilerplate'
 
 const engine = someBoilerplateEngine(evenMoreBoilerplate())
 
-// This part of the code will be visible by default
+// 这部分代码默认可见
 engine.doSomething(1, 2, 3, calcFn)
 
 function calcFn() {
-  // You can have multiple collapsed sections
+  // 一个代码块里可以有多个折叠区块
   const a = 1
   const b = 2
   const c = a + b
 
-  // This will remain visible
-  console.log(`Calculation result: ${a} + ${b} = ${c}`)
+  // 这一行会保持可见
+  console.log(`计算结果：${a} + ${b} = ${c}`)
   return c
 }
 
-// All this code until the end of the block will be collapsed again
+// 从这里直到代码块结尾的内容会再次被折叠
 engine.closeConnection()
 engine.freeMemory()
-engine.shutdown({ reason: 'End of example boilerplate code' })
+engine.shutdown({ reason: '样板示例代码结束' })
 ```
 
-## Line Numbers
+## 行号
 
 [Line Numbers](https://expressive-code.com/plugins/line-numbers/)
 
-### Displaying line numbers per block
+### 为单个代码块显示行号
 
 ```js showLineNumbers
-// This code block will show line numbers
-console.log('Greetings from line 2!')
-console.log('I am on line 3')
+// 这个代码块会显示行号
+console.log('第 2 行向你问好！')
+console.log('我在第 3 行')
 ```
 
 ---
 
 ```js showLineNumbers=false
-// Line numbers are disabled for this block
-console.log('Hello?')
-console.log('Sorry, do you know what line I am on?')
+// 这个代码块关闭了行号
+console.log('有人吗？')
+console.log('抱歉，你知道我现在在第几行吗？')
 ```
 
-### Changing the starting line number
+### 修改起始行号
 
 ```js showLineNumbers startLineNumber=5
-console.log('Greetings from line 5!')
-console.log('I am on line 6')
+console.log('第 5 行向你问好！')
+console.log('我在第 6 行')
 ```

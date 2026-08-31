@@ -1,52 +1,46 @@
 ---
-title: Markdown Example
+title: Markdown 示例
 published: 2023-10-01
-description: A simple example of a Markdown blog post.
-tags: [Markdown, Blogging, Demo]
-category: Examples
+description: 一篇简单的 Markdown 博客文章示例。
+tags: [Markdown, 博客写作, 演示]
+category: 示例
 draft: false
 ---
 
-# An h1 header
+# 一级标题
 
-Paragraphs are separated by a blank line.
+段落之间用空行分隔。
 
-2nd paragraph. _Italic_, **bold**, and `monospace`. Itemized lists
-look like:
+第二段。_斜体_、**粗体**，以及 `等宽字体`。无序列表看起来是这样的：
 
-- this one
-- that one
-- the other one
+- 这一项
+- 那一项
+- 另外一项
 
-Note that --- not considering the asterisk --- the actual text
-content starts at 4-columns in.
+注意 --- 先不算前面的星号 --- 实际的文本内容是从第 4 列开始的。
 
-> Block quotes are
-> written like so.
+> 引用块
+> 就像这样写。
 >
-> They can span multiple paragraphs,
-> if you like.
+> 如果你愿意，它也可以
+> 跨越多个段落。
 
-Use 3 dashes for an em-dash. Use 2 dashes for ranges (ex., "it's all
-in chapters 12--14"). Three dots ... will be converted to an ellipsis.
-Unicode is supported. ☺
+用 3 个连字符可以得到一个破折号，用 2 个连字符表示范围（例如“全都在第 12--14 章里”）。三个点 ... 会被转换成省略号。Unicode 也是支持的。☺
 
-## An h2 header
+## 二级标题
 
-Here's a numbered list:
+下面是一个有序列表：
 
-1. first item
-2. second item
-3. third item
+1. 第一项
+2. 第二项
+3. 第三项
 
-Note again how the actual text starts at 4 columns in (4 characters
-from the left side). Here's a code sample:
+再次注意，实际的文本是从第 4 列（即距左侧 4 个字符）开始的。下面是一段代码示例：
 
-    # Let me re-iterate ...
+    # 我再重复一遍 ...
     for i in 1 .. 10 { do-something(i) }
 
-As you probably guessed, indented 4 spaces. By the way, instead of
-indenting the block, you can use delimited blocks, if you like:
+如你所料，它缩进了 4 个空格。顺便一提，如果你愿意，也可以不缩进整块代码，而改用围栏式代码块：
 
 ```
 define foobar() {
@@ -54,111 +48,103 @@ define foobar() {
 }
 ```
 
-(which makes copying & pasting easier). You can optionally mark the
-delimited block for Pandoc to syntax highlight it:
+（这样复制粘贴起来更方便。）你还可以给围栏式代码块标注语言，让 Pandoc 为它添加语法高亮：
 
 ```python
 import time
-# Quick, count to ten!
+# 快，数到十！
 for i in range(10):
-    # (but not *too* quick)
+    # （但也别*太*快）
     time.sleep(0.5)
     print i
 ```
 
-### An h3 header
+### 三级标题
 
-Now a nested list:
+下面是一个嵌套列表：
 
-1. First, get these ingredients:
+1. 首先，准备好这些食材：
 
-    - carrots
-    - celery
-    - lentils
+    - 胡萝卜
+    - 芹菜
+    - 扁豆
 
-2. Boil some water.
+2. 烧一锅开水。
 
-3. Dump everything in the pot and follow
-    this algorithm:
+3. 把所有东西倒进锅里，然后按下面的步骤操作：
 
-        find wooden spoon
-        uncover pot
-        stir
-        cover pot
-        balance wooden spoon precariously on pot handle
-        wait 10 minutes
-        goto first step (or shut off burner when done)
+        找到木勺
+        揭开锅盖
+        搅拌
+        盖上锅盖
+        把木勺小心地横搁在锅柄上
+        等 10 分钟
+        回到第一步（做好了就关火）
 
-    Do not bump wooden spoon or it will fall.
+    别撞到木勺，否则它会掉下去。
 
-Notice again how text always lines up on 4-space indents (including
-that last line which continues item 3 above).
+再次注意，文本始终按 4 个空格的缩进对齐（包括延续上面第 3 项的最后那一行）。
 
-Here's a link to [a website](http://foo.bar), to a [local
-doc](local-doc.html), and to a [section heading in the current
-doc](#an-h2-header). Here's a footnote [^1].
+这里有一个指向[某个网站](http://foo.bar)的链接、一个指向[本地文档](local-doc.html)的链接，还有一个指向[当前文档中某个小节标题](#二级标题)的链接。这里还有一个脚注 [^1]。
 
-[^1]: Footnote text goes here.
+[^1]: 脚注的内容写在这里。
 
-Tables can look like this:
+表格可以是这样的：
 
-size material color
+尺码 材质 颜色
 
 ---
 
-9 leather brown
-10 hemp canvas natural
-11 glass transparent
+9 皮革 棕色
+10 麻帆布 本色
+11 玻璃 透明
 
-Table: Shoes, their sizes, and what they're made of
+表：鞋子的尺码，以及它们的材质
 
-(The above is the caption for the table.) Pandoc also supports
-multi-line tables:
-
----
-
-keyword text
+（上面那一行是这张表格的标题。）Pandoc 还支持多行表格：
 
 ---
 
-red Sunsets, apples, and
-other red or reddish
-things.
-
-green Leaves, grass, frogs
-and other things it's
-not easy being.
+关键词 说明
 
 ---
 
-A horizontal rule follows.
+红色 落日、苹果，以及
+其他红色或偏红的
+东西。
+
+绿色 树叶、青草、青蛙，
+以及其他“绿得不容易”
+的东西。
 
 ---
 
-Here's a definition list:
+下面是一条水平分割线。
 
-apples
-: Good for making applesauce.
-oranges
-: Citrus!
-tomatoes
-: There's no "e" in tomatoe.
+---
 
-Again, text is indented 4 spaces. (Put a blank line between each
-term/definition pair to spread things out more.)
+下面是一个定义列表：
 
-Here's a "line block":
+苹果
+: 适合用来做苹果酱。
+橙子
+: 柑橘类水果！
+西红柿
+: “tomatoe”这个拼法里其实并没有 e。
 
-| Line one
-| Line too
-| Line tree
+同样地，文本缩进 4 个空格。（在每一组词条与定义之间空一行，可以让排版更疏松一些。）
 
-and images can be specified like so:
+下面是一个“行块”：
+
+| 第一行
+| 第二行
+| 第三行
+
+图片可以这样写：
 
 [//]: # (![example image]&#40;./demo-banner.png "An exemplary image"&#41;)
 
-Inline math equations go in like so: $\omega = d\phi / dt$. Display
-math should get its own line and be put in in double-dollarsigns:
+行内公式这样写：$\omega = d\phi / dt$。行间公式应该独占一行，并用双美元符号包裹起来：
 
 $$I = \int \rho R^{2} dV$$
 
@@ -171,5 +157,4 @@ $$
 \end{equation*}
 $$
 
-And note that you can backslash-escape any punctuation characters
-which you wish to be displayed literally, ex.: \`foo\`, \*bar\*, etc.
+另外要注意，任何你希望按字面显示的标点符号，都可以用反斜杠转义，例如：\`foo\`、\*bar\*，等等。
