@@ -359,28 +359,23 @@ git push
 
 ## 7. 已知坑
 
-### 构建偶发失败：`The 'link' class does not exist`
+### CSS 文件是被图片 glob“顺带”加载的（已知设计缺陷）
 
-症状：`pnpm build` 报
+`src/styles/` 下的所有样式文件**没有任何地方显式 import**。它们之所以能进构建，是因为
+`src/components/misc/ImageWrapper.astro` 里那句为了动态解析图片写的
+`import.meta.glob("../../**")` 把 `src/` 下的一切都扫进了模块图。实测把这个 glob 收窄成只匹配图片后，
+`card-base`、`custom-md` 等类会从产物 CSS 里整体消失、站点样式全没——所以**在补上显式 import 之前，
+不要去收窄那个 glob**。
 
-```
-[vite:css] [postcss] src/styles/markdown.css:23:9:
-The `link` class does not exist. If `link` is a custom class, make sure it is defined within a `@layer` directive.
-```
+这个机制带来过一个偶发构建失败（`markdown.css` 里 `@apply link` 报
+`The 'link' class does not exist`）：每个 CSS 文件是独立的 PostCSS 入口，
+跨文件 `@apply` 别人 `@layer components` 里的自定义类，能否解析取决于对方是否恰好先被处理，
+而 Tailwind 的 content glob 包含 `src/**/*.md`，改文章就会扰动处理顺序。
 
-**重跑一次通常就好**（观测到 5 次构建里失败 2 次，都发生在只改了 Markdown 内容之后）。
-
-原因分析：`.link` 定义在 `src/styles/main.css` 的 `@layer components` 里，而
-`src/styles/markdown.css` 里用了 `@apply ... link ...`。这些 CSS 文件谁都没被显式 import，
-它们是被 `src/components/misc/ImageWrapper.astro` 里那句 `import.meta.glob("../../**")`
-连带扫进构建图的，各自作为独立的 PostCSS 入口编译。`@apply link` 能不能解析，取决于
-`main.css` 是否恰好先被处理过——于是构建顺序一变就有概率失败。Tailwind 的 content glob
-包含 `src/**/*.md`，所以改文章正好会扰动这个顺序。
-
-如果 Cloudflare 上遇到，在 Dashboard 点 Retry deployment 即可。想彻底消灭它，需要把
-`.link` / `expand-animation` 从 `@layer components` 挪进 `tailwind.config.cjs` 的
-`addComponents` 插件里（这样它们属于 Tailwind 配置上下文，任何入口都能 `@apply`），
-或者把 `markdown.css` 里的 `@apply link` 展开成底层工具类。**目前没有改**，属于上游遗留问题。
+**已修复**（`fix(styles)`）：`markdown.css` 里两处跨文件引用（`link`、`btn-regular-dark`）
+已改成内联展开对应的工具类，产物 CSS 逐条比对与修复前完全一致。
+**新增规则：不要在 `src/styles/` 的任何文件里 `@apply` 另一个文件定义的自定义类**，
+需要复用就内联展开，并在两边留注释（`main.css` 和 `markdown.css` 里已经写了）。
 
 ### 本地 `biome ci` 报所有文件都没格式化
 
@@ -390,8 +385,6 @@ Windows 检出时 `core.autocrlf=true`，工作区是 CRLF，而 Biome 的 `line
 
 ### 其他
 
-- `src/config.ts` 里 `title: "Fuwari"` / `subtitle: "Demo Site"` **还是上游的演示值**，
-  站点已经上线但站名没改，建议尽早改掉。
 - `docs/README.*.md` 是上游的多语言 README，与本仓库配置无关。
 - 客户端 JS 有个特殊约束：站点用 `@swup/astro` 做无刷新页面切换，只替换 `main` 和 `#toc` 容器。
   任何新加的浏览器端初始化逻辑都必须注册到 `window.swup.hooks` 上（照抄 `Layout.astro` 里的写法），
