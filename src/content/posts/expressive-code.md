@@ -5,6 +5,7 @@ description: 使用 Expressive Code 后，Markdown 中的代码块是什么样�
 tags: [Markdown, 博客写作, 演示]
 category: 示例
 draft: false
+hideOnHome: true
 ---
 
 下面来看看借助 [Expressive Code](https://expressive-code.com/) 渲染出来的代码块效果。这里的示例都来自官方文档，需要了解更多细节可以直接查阅官方文档。

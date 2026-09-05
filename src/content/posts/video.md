@@ -5,6 +5,7 @@ description: 本文演示如何在博客文章中嵌入视频。
 tags: [示例, 视频]
 category: 示例
 draft: false
+hideOnHome: true
 ---
 
 只需从 YouTube 或其他平台复制嵌入代码，粘贴到 Markdown 文件中即可。

@@ -7,6 +7,7 @@ image: ''
 tags: [演示, 示例, Markdown, Fuwari]
 category: '示例'
 draft: false
+hideOnHome: true
 ---
 
 ## GitHub 仓库卡片

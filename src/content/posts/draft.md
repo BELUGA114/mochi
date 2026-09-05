@@ -4,6 +4,7 @@ published: 2022-07-01
 tags: [Markdown, 博客写作, 演示]
 category: 示例
 draft: true
+hideOnHome: true
 ---
 
 # 本文是一篇草稿
