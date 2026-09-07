@@ -1,18 +1,18 @@
 ---
 title: XHTTP 原理、玩法与实战配置
 published: 2026-09-07
-description: ''
+description: 整理自 XHTTP 官方讨论的研读与实践：三种模式与 XMUX 的取舍、过 CF 与 Nginx 前置的配置，以及上下行分离、REALITY 混搭等进阶玩法。
 image: ''
-tags: [VPS, Xray]
+tags: [VPS, Xray, XHTTP, REALITY, Cloudflare]
 category: 网络
-draft: false 
+draft: false
 ---
 
 ## 前言
 
 本文整理自 [XHTTP: Beyond REALITY](https://github.com/XTLS/Xray-core/discussions/4113) 与 [官方文档](https://xtls.github.io/config/) 的研读和实践讨论。
 
-配置基于 Xray v26.7.11 的字段名：传输方式写在 `streamSettings.method`（旧版为 `streamSettings.network`）
+配置基于 Xray v26.7.11 的字段名：传输方式写在 `streamSettings.method`（旧版为 `streamSettings.network`）。
 
 示例统一使用以下占位：`domain.com` 为主域名，`cf1.domain.com` / `cf2.domain.com` / `cf3.domain.com` 为开启橙云的子域，`/yourpath` 为 XHTTP path，VPS 上以 `vpsadmin` 账户运行 Xray，证书目录 `~/xray_cert`。
 
@@ -22,15 +22,16 @@ CDN 和大多数 HTTP 中间盒为保护源站，除了有特殊支持的 WS、g
 
 XHTTP 只把上行包装为一个个 POST 请求，下行用一个长期的 GET 流式返回。下行响应头带 `X-Accel-Buffering: no`（禁用中间盒缓冲）、`Cache-Control: no-store`（无需缓存）、`Content-Type: text/event-stream`（伪装成 SSE）。从网站下载大文件时 CDN 回源不会等源站发完整个文件，而是来多少转发多少，XHTTP 的流式下行建立在这个行为上，所以最重要的下行速率可以拉满。上行本来打折，后来加了 stream-up 流式上行补齐，几轮优化后 packet-up 的速率也直追 stream-up。
 
-## 能力
+## 优势
 
-- QUIC H3 过 CDN：中间盒会做 HTTP 版本转换（H3 进、H1/H2 回源），服务端只需监听 TCP 上的 H1/H2，客户端 `alpn` 填 `"h3"` 即可用 QUIC。H3 没有 TCP 队头阻塞，支持连接迁移，换网不断流
+- QUIC H3 过 CDN：中间盒做 HTTP 版本转换（H3 进、H1/H2 回源），服务端只需监听 TCP 上的 H1/H2，客户端 `alpn` 填 `"h3"` 即可用 QUIC
 - XMUX：H2/H3 的 0-RTT 多路复用控制
 - 上下行分离：服务端仅按 path 中随机生成的 UUID 关联上下行，两个方向可以走完全不同的入口
 - Header padding（`xPaddingBytes`，默认 100-1000 随机）：请求头的 padding 放在 `Referer: ...?x_padding=XXX...`，响应头用 `X-Padding`，消除固定长度特征
 - `extra` 分享机制：`host`、`path`、`mode` 以外的所有参数可整块塞进分享链接，由服务发布者下发
 - Browser Dialer：用真浏览器的网络栈和 TLS 指纹发请求
-- 相比 gRPC 传输层：无需 gRPC 库性能更好，下行是独立 GET 不受 CDN 对 gRPC 的限速，还有 padding、XMUX、上下行分离和 extra。相比 WS/HTTPUpgrade：没有 `ALPN = http/1.1` 的显著特征
+- 相比 gRPC 传输层：无需 gRPC 库性能更好，下行是独立 GET 不受 CDN 对 gRPC 的限速
+- 相比 WS/HTTPUpgrade：没有 `ALPN = http/1.1` 的显著特征
 - 服务端可藏在真正的 Nginx/Caddy 后面，指纹特征比裸跑 quic-go 少得多
 
 ## 三种模式
@@ -296,7 +297,7 @@ location /yourpath {
 }
 ```
 
-客户端不出现新块，沿用 [上文](#过-CDN（TLS）) 的字段。
+客户端不出现新块，沿用 [上文](#过-CDNTLS) 的字段。
 
 ### 上下行分离
 
@@ -362,7 +363,7 @@ SNI 与 Host 不一致即域前置；两者是同一 zone 内不同子域即同�
 
 上行 `tlsSettings.serverName` 填 `cf1.domain.com`。链路抓包看到的两条 TLS 握手 SNI 分别是 cf1 和 cf2，两个方向的 Host 都是 cf3，CF 按 cf3 回源到你的 VPS。
 
-服务端没必要设 `host`。设了就会校验客户端发来的值，而 path 后面已经足够隐蔽，多一个校验只是多一个特征。`host` 不能写在 `extra.headers` 里，必须放在 `xhttpSettings` 这一层。
+服务端没必要设 `host`。设了就会校验客户端发来的值，path 已经足够隐蔽，多一个校验只是多一个特征。`host` 不能写在 `extra.headers` 里，必须放在 `xhttpSettings` 这一层。
 
 当 cf1 和 cf2 都橙云直指同一台 VPS 时，不填 `host` 也可以，各方向 Host 跟着自己的 SNI 走，CF 回源到同一台机器同一 path，照样按 UUID 缝合。需要第三个域名的场景：源站前有 Nginx 按 `server_name` 分流、只想为一个域名配回源规则（Origin Rules / Page Rules）、或想让两个方向走完全一样的回源逻辑。
 
@@ -542,7 +543,7 @@ XRAY_BROWSER_DIALER=127.0.0.1:8080 ./xray -c config.json
 
 流量走向：Xray 不自己建 TLS，把 "连到 `https://cf1.domain.com/yourpath`" 这个动作交给页面里的 JS，浏览器用自己真实的网络栈和 TLS 指纹发出，数据经本地 WebSocket 回到 Xray，指纹是真的，代价是 JS 中转的性能损耗。
 
-Xray 文档里"建议开启 Mux.Cool"是给 WebSocket 的；XHTTP 不能开 mux.cool，要压浏览器连接数就调大 XMUX 的 `maxConcurrency`。
+XHTTP 不能开 mux.cool，要压浏览器连接数就调大 XMUX 的 `maxConcurrency`。
 
 ### FinalMask 给 H3 调拥塞控制
 
@@ -562,7 +563,7 @@ Xray 文档里"建议开启 Mux.Cool"是给 WebSocket 的；XHTTP 不能开 mux.
 }
 ```
 
-XHTTP H3 无协商机制，用不了 `brutal`，只能用免协商的 `force-brutal`，它强制上行按 `brutalUp` 定速发包。只对自建 H3 直连有意义；过 CDN 时这些参数没有作用对象，CDN 那一跳的拥塞控制不由你决定。文章也不建议服务端裸跑 quic-go H3，更推荐藏在真 Nginx/Caddy 后面。
+XHTTP H3 无协商机制，用不了 `brutal`，只能用免协商的 `force-brutal`，它强制上行按 `brutalUp` 定速发包。只对自建 H3 直连有意义；过 CDN 时这些参数没有作用对象，CDN 那一跳的拥塞控制不由你决定。官方文档也不建议服务端裸跑 quic-go H3，更推荐藏在真 Nginx/Caddy 后面。
 
 ## 域名与 Cloudflare
 
@@ -570,7 +571,7 @@ XHTTP H3 无协商机制，用不了 `brutal`，只能用免协商的 `force-bru
 
 灰云子域：CF 只做 DNS 解析、不代理。适合给直连/REALITY 节点当 `address`，只有灰云才解析出 VPS 真实 IP。
 
-当面板 SSL 模式为 Flexible 时，CF 回源走明文 HTTP，Xray 服务端不配 TLS 也能 "正常用"，但 VLESS 载荷在 CF 机房到 VPS 的公网链路上是以明文传输。建议使用 Full (strict) 并配证书。
+当面板 SSL 模式为 Flexible 时，CF 回源走明文 HTTP，Xray 服务端不配 TLS 也能 "正常用"，但 VLESS 载荷在 CF 机房到 VPS 的公网链路上是以明文形式传输的。建议使用 Full (strict) 并配证书。
 
 若回源走非标端口（如 8443），需使用 Origin Rule 重写回源端口。
 
@@ -644,10 +645,7 @@ chmod +r ~/xray_cert/xray.crt
 
 ## 注意事项
 
-- XHTTP 不能配 mux.cool，新版服务端已有检查，只接受纯 XUDP
-- XHTTP + REALITY 时 VLESS `flow` 留空
 - CF 掐断下行 100 秒无实际数据的 HTTP，长连接要做应用层保活（sshd 设 `ClientAliveInterval`）；stream-up 上行被掐，在服务端设置 `scStreamUpServerSecs`
 - packet-up 和 `Referer` 长 padding 会刷出大量长日志，建议在反代软件里指定不记录
 - `address` 填优选 IP 时 `serverName` 必填，且 IP 不能当 SNI，留空则无 SNI 扩展，CF 会拒
 - REALITY 的 `target` 别偷 Cloudflare 类免费 CDN 的证书，否则服务器会沦为别人的加速节点；迫不得已就配 `limitFallbackUpload`/`limitFallbackDownload` 限速，但限速本身也是特征
-- XMUX 填了任意一项后其余项没有默认值，须全部显式填写
