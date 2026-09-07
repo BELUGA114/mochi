@@ -1,7 +1,7 @@
 ---
 title: XHTTP 原理、玩法与实战配置
-published: 2026-09-07
-description: 整理自 XHTTP 官方讨论的研读与实践：三种模式与 XMUX 的取舍、过 CF 与 Nginx 前置的配置，以及上下行分离、REALITY 混搭等进阶玩法。
+published: 2026-08-03
+description: 对 XHTTP 官方文档的研读与实践：三种模式与 XMUX 的取舍、过 CF 与 Nginx 前置的配置，以及上下行分离、REALITY 混搭等进阶玩法。
 image: ''
 tags: [VPS, Xray, XHTTP, REALITY, Cloudflare]
 category: 网络
@@ -10,7 +10,7 @@ draft: false
 
 ## 前言
 
-本文整理自 [XHTTP: Beyond REALITY](https://github.com/XTLS/Xray-core/discussions/4113) 与 [官方文档](https://xtls.github.io/config/) 的研读和实践讨论。
+本文来自对 [XHTTP: Beyond REALITY](https://github.com/XTLS/Xray-core/discussions/4113) 与 [官方文档](https://xtls.github.io/config/) 的研读和实践。
 
 配置基于 Xray v26.7.11 的字段名：传输方式写在 `streamSettings.method`（旧版为 `streamSettings.network`）。
 
@@ -649,3 +649,9 @@ chmod +r ~/xray_cert/xray.crt
 - packet-up 和 `Referer` 长 padding 会刷出大量长日志，建议在反代软件里指定不记录
 - `address` 填优选 IP 时 `serverName` 必填，且 IP 不能当 SNI，留空则无 SNI 扩展，CF 会拒
 - REALITY 的 `target` 别偷 Cloudflare 类免费 CDN 的证书，否则服务器会沦为别人的加速节点；迫不得已就配 `limitFallbackUpload`/`limitFallbackDownload` 限速，但限速本身也是特征
+
+## 结语
+
+回头看，XHTTP 是 Xray 第一个原生传输层，一上来就整了波大的：各种姿势穿透中间盒，分包 POST、XMUX、上下行分离各自消掉一类特征，还能和 REALITY 互补着用。
+
+**"Beyond REALITY 的意思并非是取代 REALITY，而是流行程度超越 REALITY"** 这话不算夸张，从 REALITY 直连到 CDN、Nginx 前置、双入口混搭，XHTTP 有能力做到全场景通吃。
