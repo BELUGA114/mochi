@@ -573,7 +573,7 @@ XHTTP H3 无协商机制，用不了 `brutal`，只能用免协商的 `force-bru
 
 当面板 SSL 模式为 Flexible 时，CF 回源走明文 HTTP，Xray 服务端不配 TLS 也能 "正常用"，但 VLESS 载荷在 CF 机房到 VPS 的公网链路上是以明文形式传输的。建议使用 Full (strict) 并配证书。
 
-若回源走非标端口（如 8443），需使用 Origin Rule 重写回源端口。
+回源端口需要是 [Cloudflare 支持的端口](https://developers.cloudflare.com/fundamentals/reference/network-ports/)，非标端口（比如 10086）需使用 Origin Rule 重写回源端口。
 
 ### 证书：ACME DNS-01 与 CF Origin CA
 
