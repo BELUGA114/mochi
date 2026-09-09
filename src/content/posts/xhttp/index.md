@@ -10,9 +10,9 @@ draft: false
 
 ## 前言
 
-本文来自对 [XHTTP: Beyond REALITY](https://github.com/XTLS/Xray-core/discussions/4113) 与 [官方文档](https://xtls.github.io/config/) 的研读和实践。
+本文来自对 [XHTTP: Beyond REALITY](https://github.com/XTLS/Xray-core/discussions/4113) 与 [官方文档](https://xtls.github.io/config/) 的研读和实践，XHTTP: Beyond REALITY 写于 XHTTP 早期，部分描述已过时，本文以源码为准，过时处已逐一更正并标注。
 
-配置基于 Xray v26.7.11 的字段名：传输方式写在 `streamSettings.method`（旧版为 `streamSettings.network`）。
+配置基于 Xray v26.9.8 的字段名：传输方式写在 `streamSettings.method`（旧版为 `streamSettings.network`）。
 
 示例统一使用以下占位：`domain.com` 为主域名，`cf1.domain.com` / `cf2.domain.com` / `cf3.domain.com` 为开启橙云的子域，`/yourpath` 为 XHTTP path，VPS 上以 `vpsadmin` 账户运行 Xray，证书目录 `~/xray_cert`。
 
@@ -27,7 +27,8 @@ XHTTP 只把上行包装为一个个 POST 请求，下行用一个长期的 GET 
 - QUIC H3 过 CDN：中间盒做 HTTP 版本转换（H3 进、H1/H2 回源），服务端只需监听 TCP 上的 H1/H2，客户端 `alpn` 填 `"h3"` 即可用 QUIC
 - XMUX：H2/H3 的 0-RTT 多路复用控制
 - 上下行分离：服务端仅按 path 中随机生成的 UUID 关联上下行，两个方向可以走完全不同的入口
-- Header padding（`xPaddingBytes`，默认 100-1000 随机）：请求头的 padding 放在 `Referer: ...?x_padding=XXX...`，响应头用 `X-Padding`，消除固定长度特征
+- Header padding（`xPaddingBytes`，默认 100-1000 随机）：请求头的 padding 放在 `Referer: ...?x_padding=XXX...`，响应头用 `X-Padding`，消除固定长度特征；位置、键名、内容样式均可混淆
+- 请求元数据混淆：会话 ID、seq、上行数据的载体（path / query / header / cookie）与形态都可配置、随机化，避免在 CDN 与反代日志里留下固定模式
 - `extra` 分享机制：`host`、`path`、`mode` 以外的所有参数可整块塞进分享链接，由服务发布者下发
 - Browser Dialer：用真浏览器的网络栈和 TLS 指纹发请求
 - 相比 gRPC 传输层：无需 gRPC 库性能更好，下行是独立 GET 不受 CDN 对 gRPC 的限速
@@ -38,19 +39,19 @@ XHTTP 只把上行包装为一个个 POST 请求，下行用一个长期的 GET 
 
 | 模式 | 上行 | 下行 | HTTP 请求数 | 说明 |
 |---|---|---|---|---|
-| packet-up | 分包 POST `/path/UUID/seq` | GET 流式 | N 个 | 兼容性最强，H3 的默认模式 |
+| packet-up | 分包 POST `/path/UUID/seq` | GET 流式 | N 个 | 兼容性最强，auto 的默认选择 |
 | stream-up | 流式 POST `/path/UUID` | GET 流式 | 2 个 | 上行不牺牲效率，上下行可分离 |
 | stream-one | 单个 POST `/path/`，响应即下行 | 同一请求 | 1 个 | 最接近普通请求形状，REALITY 直连默认 |
 
 **"mode" 四选一，客户端、服务端默认值都是 "auto"：**
-- "auto" - 客户端：TLS H2 时 stream-up，**REALITY 时 stream-one**（有 `downloadSettings` 时 stream-up），否则 packet-up / 服务端：同时接受三种模式
+- "auto" - 客户端：一律 packet-up，**REALITY 时 stream-one**（有 `downloadSettings` 时 stream-up）/ 服务端：同时接受三种模式
 - "packet-up" - 客户端：分包上行 + 流式下行（单独的子连接）/ 服务端：仅接受 packet-up
 - "stream-up" - 客户端：流式上行 + 流式下行（另一条子连接）/ 服务端：仅接受 stream-up 和 stream-one
 - "stream-one" - 客户端：流式上行 + 流式下行（同一条子连接），不能有 downloadSettings / 服务端：仅接受 stream-one
 
 **模式细节**：
 
-- packet-up 的 seq 从 0 开始，必须发完上一个 POST 的 body 再发下一个；乱序到达由服务端按 seq 重组，默认最多缓存 30 个，超限断连。UUID 和 seq 设计在 path 而非 query string，以避免奇怪的问题
+- packet-up 的 seq 从 0 开始，必须发完上一个 POST 的 body 再发下一个；乱序到达由服务端按 seq 重组，默认最多缓存 30 个，超限断连。会话 ID 与 seq 默认拼在 path（`/yourpath/UUID/seq`），开启混淆后也可挪到 query、header 或 cookie
 - stream-up / stream-one 的上行默认带 `Content-Type: application/grpc` 伪装（`noGRPCHeader` 可关），加上这个 header 后 H2 流式上行可穿透 CF，需面板开 gRPC 支持
 - stream-one 的 path 若末尾无 `/` 会自动补上
 - 下行响应头与 packet-up 一致；stream-one 会出现以 SSE 回应 gRPC 的组合，遇到问题试 `noSSEHeader`
@@ -65,9 +66,7 @@ XHTTP 只把上行包装为一个个 POST 请求，下行用一个长期的 GET 
 
 **stream-up 专属参数**：
 
-- `scStreamUpServerSecs`：仅服务端，默认 `"20-80"` 随机，每隔该时长发 `xPaddingBytes` 个字节保活。存在原因是 CF 会掐断下行 100 秒无实际数据的 HTTP，而 stream-up 的上行 POST 的响应方向会被这个机制掐断。设 `-1` 关闭并退回旧行为
-
-模式选择：REALITY 直连保持默认，要上下行分离才切 stream-up；TLS 过 CF/Nginx 用 stream-up（CF 开 gRPC，Nginx 用 `grpc_pass`）；走 H3 或 stream-up 穿不过去的中间盒退到 packet-up。服务端留 `auto` 三种全收，只在客户端调模式。
+- `scStreamUpServerSecs`：仅服务端，默认 `"20-80"` 随机，每隔该时长向 stream-up 上行 POST 的响应方向写 `xPaddingBytes` 个字节保活（前提是请求带了 padding，默认总是带）。存在原因是 CF 会掐断下行 100 秒无实际数据的 HTTP，而 stream-up 的上行 POST 的响应方向会被这个机制掐断。设 `-1` 停发保活数据
 
 ## XMUX
 
@@ -75,8 +74,8 @@ H2/H3 均为 0-RTT 多路复用，XMUX 是控制它们的核心接口：
 
 | 参数 | 含义 | 全 0 时的默认值 |
 |---|---|---|
-| `maxConcurrency` | 每条连接最多同时承载的代理请求数，达到后建新连接 | `"16-32"` 随机 |
-| `maxConnections` | 最多连接数，达到前每个新请求开新连接，之后开始复用 | 0（不限） |
+| `maxConcurrency` | 每条连接最多同时承载的代理请求数，达到后建新连接 | 0（不限） |
+| `maxConnections` | 最多连接数，达到前每个新请求开新连接，之后开始复用 | 3（固定） |
 | `cMaxReuseTimes` | 一条连接最多被复用几次 | 0（不限） |
 | `hMaxRequestTimes` | 一条连接累计承载的 HTTP 请求上限（对付 Nginx 每连接 1000 请求上限） | `"600-900"` 随机 |
 | `hMaxReusableSecs` | 一条连接的最长复用时长（对付 Nginx 一小时上限） | `"1800-3000"` 随机 |
@@ -84,14 +83,57 @@ H2/H3 均为 0-RTT 多路复用，XMUX 是控制它们的核心接口：
 
 **用法上的注意：**
 
-- `maxConcurrency` 与 `maxConnections` 冲突，只能二选一
+- `maxConcurrency` 与 `maxConnections` 冲突（都大于 0 直接报错），只能二选一
 - `hKeepAlivePeriod` 是唯一不允许填范围的项（该值取随机本身才是特征），且允许负数（-1 关闭空闲保活）
 - 填了任意一项后其余项就没有默认值了，须全部显式填写
 - packet-up 循环 POST 超过 `hMaxRequestTimes` / `hMaxReusableSecs` 时会自动切换到另一条连接，占一次 reuseTimes 但不占 concurrency
-- 默认值全部取随机的目的在于消除连接数层面的 fixed pattern，这也是 `maxConcurrency` 选范围形式而非固定值的原因
+- 默认策略历经两次调整：早期的 `maxConcurrency: "16-32"` 先改为固定 6 条连接，v26.7.28 起再降为固定 3 条（anti-TSPU）。当前默认是 `maxConnections: 3` 固定值，配合随机的 `hMaxRequestTimes` / `hMaxReusableSecs`，相当于固定维持 3 条底层连接、到期整体换新，既消除"始终一条连接"的断流问题，也避免连接数成为突增特征
 - 使用 XHTTP 时不要启用 mux.cool，新版服务端已检查，只接受纯 XUDP
 
 常用组合：多线程测速前设 `"maxConcurrency": 1`，否则数字难看；要一条连接复用到底设 `"maxConnections": 1`。
+
+## 请求混淆
+
+XHTTP 请求里有一批稳定可识别的"元数据"特征：padding 默认放在 `Referer: /yourpath?x_padding=XXXX...`，会话 ID 和 seq 默认以 UUID / 数字形式拼在 path 里。这些在 CDN、反代的访问日志与 WAF 规则里都是显眼的模式。后续版本加入了一组混淆参数，把这些元数据挪走并随机化：
+
+| 参数 | 作用 | 默认值 |
+|---|---|---|
+| `xPaddingObfsMode` | 总开关，开启后 padding 的位置与样式按下列参数走 | `false`（固定 `Referer` + `x_padding`） |
+| `xPaddingPlacement` | padding 放哪：`queryInHeader` / `cookie` / `header` / `query` | `queryInHeader` |
+| `xPaddingMethod` | padding 内容：`repeat-x`（重复 `X`）/ `tokenish`（随机 Base62） | `repeat-x` |
+| `xPaddingKey` / `xPaddingHeader` | query / cookie 的键名 / 承载 query 的头名 | `x_padding` / `X-Padding` |
+| `sessionIDPlacement` | 会话 ID 放哪：`path` / `query` / `header` / `cookie` | `path` |
+| `sessionIDTable` / `sessionIDLength` | 会话 ID 的字符表（预置 `Base62`、`Alphabet`、`hex` 等）与长度范围 | 空（用 UUID） |
+| `seqPlacement` | seq 放哪（同上四选一） | `path` |
+| `uplinkDataPlacement` | packet-up 上行数据放 `body` / `header` / `cookie`（后两者仅 packet-up） | `body` |
+| `uplinkHTTPMethod` | 上行 HTTP 方法，`GET` 仅 packet-up 可用 | `POST` |
+| `serverMaxHeaderBytes` | 服务端接受的最大请求头字节数（数据放 header 时要相应调大） | 8192 |
+
+客户端模板（可整块放进 `extra` 下发；服务端配同样的值）：
+
+```jsonc title="客户端"
+"xhttpSettings": {
+  "path": "/yourpath",
+  "extra": {
+    "xPaddingObfsMode": true,
+    "xPaddingPlacement": "queryInHeader",
+    "xPaddingMethod": "tokenish",
+    "xPaddingKey": "t",
+    "xPaddingHeader": "Referer",
+    "sessionIDPlacement": "path",
+    "sessionIDTable": "Base62",
+    "sessionIDLength": "12-20"
+  }
+}
+```
+
+注意：
+
+- `xPaddingBytes` 本身不可关闭（填 0 或负数直接报错），默认 100-1000 随机
+- `tokenish` 生成随机 Base62 串，按 HPACK huffman 编码后长度落在 `xPaddingBytes` 区间内，服务端校验同样按 huffman 长度算，比一串 `X` 更像真实数据
+- `queryInHeader` 仍是把 padding 塞进某个头（可自定义，默认 `Referer`）的 URL query 里，对 CF 兼容性最好；`cookie` / `header` / `query` 则完全离开 URL
+- 会话 ID 不再是 UUID，而是从字符表随机取的串（如 `/yourpath/aB3xK9mPqZ2r`），`sessionIDTable` × `sessionIDLength` 的组合空间须大于 2^31，否则配置报错
+- 服务端校验 padding 的存在与长度：两端参数不一致时请求会被 400 拒绝，调参要同步改
 
 ## XHTTP + REALITY 对比 RAW + REALITY + Vision
 
@@ -224,12 +266,20 @@ H3 版只改一处 `alpn`：
 "tlsSettings": { "serverName": "cf1.domain.com", "alpn": ["h3"], "fingerprint": "chrome" }
 ```
 
-穿不过去时显式指定兼容性最强的模式：
+H2 且要流式上行时显式指定 `mode`（需 CF 面板开 gRPC 支持）：
 
 ```jsonc title="客户端"
 "xhttpSettings": {
   "path": "/yourpath",
-  "mode": "packet-up",
+  "mode": "stream-up"
+}
+```
+
+packet-up 已是默认模式无需指定；若 CDN 对请求体大小敏感，可调分包节奏：
+
+```jsonc title="客户端"
+"xhttpSettings": {
+  "path": "/yourpath",
   "extra": {
     "scMaxEachPostBytes": "500000-1000000",   // 要小于 CDN 允许的最大请求体
     "scMinPostsIntervalMs": "10-50"
@@ -237,7 +287,7 @@ H3 版只改一处 `alpn`：
 }
 ```
 
-客户端连 CF 边缘 IP，SNI 为 cf1，CF 用边缘证书（Universal SSL）握手。H2 版上行是流式 `POST /yourpath/UUID`（带 gRPC 伪装头，所以 CF 面板要开 gRPC 支持），下行是独立 `GET /yourpath/UUID`；CF 按 Host 回源到 VPS 的端口，验证 Origin 证书后转发给 Xray。H3 版客户端跑 quic-go QUIC，到 CF 那一跳被降成 H1/H2 回源，服务端无需监听 UDP。
+客户端连 CF 边缘 IP，SNI 为 cf1，CF 用边缘证书（Universal SSL）握手。默认（auto = packet-up）上行是分包 `POST /yourpath/UUID/seq`，下行是独立 `GET /yourpath/UUID`；显式 `"stream-up"` 时上行才变成流式 `POST /yourpath/UUID`（带 gRPC 伪装头）。CF 按 Host 回源到 VPS 的端口，验证 Origin 证书后转发给 Xray。H3 版客户端跑 quic-go QUIC，到 CF 被降成 H1/H2 回源，服务端无需监听 UDP。
 
 CF 会掐断下行 100 秒无实际数据的 HTTP，代理长连接需应用层保活，比如 sshd 的 `ClientAliveInterval`。
 
@@ -527,7 +577,7 @@ server {
 }}
 ```
 
-日常保持全 0。三个随机范围默认值相当于隔段时间换一条新 H2/H3 主连接，不会有 gRPC、HTTP 传输层始终复用同一条连接导致的断流体验，也没有连接数固定特征。
+日常保持全 0。默认相当于固定维持 3 条底层连接、随 `hMaxRequestTimes` / `hMaxReusableSecs` 到期整体换新，不会有 gRPC、HTTP 传输层始终复用同一条连接导致的断流体验，也没有连接数固定特征。
 
 ### Browser Dialer
 
@@ -539,6 +589,7 @@ XRAY_BROWSER_DIALER=127.0.0.1:8080 ./xray -c config.json
 
 - `address` 必须是域名，要指定 IP 就改系统 hosts 或内置 DNS
 - 整个 `tlsSettings` 失效，HTTP 版本由浏览器决定，`SNI == host == address`
+- 非 80/443 的端口已支持（2026-04 起，端口会自动拼进交给浏览器的 URL）
 - 浏览器到服务端必须直连；用 tun 的话在路由里给服务端地址单独一条 freedom，否则死循环
 
 流量走向：Xray 不自己建 TLS，把 "连到 `https://cf1.domain.com/yourpath`" 这个动作交给页面里的 JS，浏览器用自己真实的网络栈和 TLS 指纹发出，数据经本地 WebSocket 回到 Xray，指纹是真的，代价是 JS 中转的性能损耗。
@@ -575,6 +626,22 @@ XHTTP H3 无协商机制，用不了 `brutal`，只能用免协商的 `force-bru
 
 回源端口需要是 [Cloudflare 支持的端口](https://developers.cloudflare.com/fundamentals/reference/network-ports/)，非标端口（比如 10086）需使用 Origin Rule 重写回源端口。
 
+面板还需加一条缓存规则（Cache Rules）：按 CDN 主机名或 XHTTP path 匹配、缓存资格设为绕过（Bypass），避免 XHTTP 请求被 CF 的缓存层截留或延迟。
+
+### ECH：加密 SNI（可选）
+
+CF 面板开启 ECH 后，客户端在 `tlsSettings` 加 `echConfigList` 即可加密 SNI。格式为 `"域名+DNS服务器"`，服务器支持 `https://`（DoH）、`h2c://`、`udp://` 三种：
+
+```jsonc title="客户端"
+"tlsSettings": {
+  "serverName": "cf1.domain.com",
+  "alpn": ["h3", "h2"],
+  "echConfigList": "cf1.domain.com+udp://223.5.5.5:53"
+}
+```
+
+域前缀强制使用该域名的 ECHConfig，不向 DNS 服务器暴露在查谁的 HTTPS 记录。
+
 ### 证书：ACME DNS-01 与 CF Origin CA
 
 回源证书的两种获取方式。cf1/cf2 同属一个 zone，签一张 `*.domain.com`（可加主域）的通配符即可，Nginx 的 `server_name` 分流也能各自匹配上。
@@ -588,11 +655,7 @@ XHTTP H3 无协商机制，用不了 `brutal`，只能用免协商的 `force-bru
 
 #### ACME DNS-01 证书
 
-1. 面板右上角头像 -> My Profile -> API Tokens -> Create Token -> Create Custom Token
-2. Permissions：Zone -> DNS -> Edit，再加 Zone -> Zone -> Read
-3. Zone Resources：Include -> Specific zone -> domain.com，最小权限，别选 All zones
-4. Create 后 token 只显示一次，立刻保存。它等于该 zone 的 DNS 写权限，别进 git、别贴聊天记录
-5. 记下 Account ID 和 Zone ID，在面板 domain.com 概述页右下角
+登录 Cloudflare 获取 Cloudflare API Token
 
 验证 token 是否存活：
 
@@ -600,12 +663,11 @@ XHTTP H3 无协商机制，用不了 `brutal`，只能用免协商的 `force-bru
 curl -s -H "Authorization: Bearer 你的token" https://api.cloudflare.com/client/v4/user/tokens/verify
 ```
 
-6. 签发证书：
+签发证书：
 
 ```shell
 export CF_Token="你的token"
 export CF_Account_ID="你的AccountID"
-export CF_Zone_ID="你的ZoneID"
 
 acme.sh --set-default-ca --server letsencrypt
 acme.sh --issue --dns dns_cf -d "domain.com" -d "*.domain.com" --keylength ec-256
@@ -613,7 +675,7 @@ acme.sh --issue --dns dns_cf -d "domain.com" -d "*.domain.com" --keylength ec-25
 
 token 会被明文存进 `~/.acme.sh/account.conf` 供续期自动复用，机器需保证安全，如发生泄露需要在面板 Revoke。
 
-7. 安装给 Xray：
+安装给 Xray：
 
 ```shell
 mkdir ~/xray_cert
@@ -646,8 +708,10 @@ chmod +r ~/xray_cert/xray.crt
 ## 注意事项
 
 - CF 掐断下行 100 秒无实际数据的 HTTP，长连接要做应用层保活（sshd 设 `ClientAliveInterval`）；stream-up 上行被掐，在服务端设置 `scStreamUpServerSecs`
-- packet-up 和 `Referer` 长 padding 会刷出大量长日志，建议在反代软件里指定不记录
+- CF 面板对 XHTTP 的 host / path 加 Cache Rule 绕过缓存，避免请求被缓存层截留
+- packet-up 和 `Referer` 长 padding 会刷出大量长日志，建议在反代软件里指定不记录；开启混淆（`tokenish` + 自定义键名）后日志形态也不再扎眼
 - `address` 填优选 IP 时 `serverName` 必填，且 IP 不能当 SNI，留空则无 SNI 扩展，CF 会拒
+- v26.9.8 起 REALITY 服务端强制 ClientHello 携带 X25519MLKEM768，奇怪和过时指纹会直接被当回落流量处理
 - REALITY 的 `target` 别偷 Cloudflare 类免费 CDN 的证书，否则服务器会沦为别人的加速节点；迫不得已就配 `limitFallbackUpload`/`limitFallbackDownload` 限速，但限速本身也是特征
 
 ## 结语
