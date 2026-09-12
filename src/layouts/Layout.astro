@@ -256,9 +256,9 @@ const bannerOffset =
 		border-color: rgba(255, 255, 255, 0.12);
 	}
 
-	/* TOC 玻璃导轨：比正文卡淡一档；:has 限定文章页，避免空 TOC 页面出现空面板；
-	   mask 渐隐需去掉，否则边框被渐隐截断 */
-	body.enable-wallpaper:has(#post-container) #toc-inner-wrapper {
+	/* TOC 玻璃导轨：比正文卡淡一档；:has(#post-container) 限定文章页、:has(a) 排除无小标题
+	   的文章，避免出现空面板；mask 渐隐需去掉，否则边框被渐隐截断 */
+	body.enable-wallpaper:has(#post-container) #toc-inner-wrapper:has(a) {
 		background-color: rgba(255, 255, 255, 0.5);
 		backdrop-filter: blur(16px) saturate(160%);
 		-webkit-backdrop-filter: blur(16px) saturate(160%);
@@ -267,7 +267,7 @@ const bannerOffset =
 		padding: 0 0.5rem;
 		mask-image: none;
 	}
-	html.dark body.enable-wallpaper:has(#post-container) #toc-inner-wrapper {
+	html.dark body.enable-wallpaper:has(#post-container) #toc-inner-wrapper:has(a) {
 		background-color: rgba(18, 18, 26, 0.5);
 		border-color: rgba(255, 255, 255, 0.1);
 	}

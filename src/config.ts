@@ -12,7 +12,7 @@ export const siteConfig: SiteConfig = {
 	subtitle: "Neko Site",
 	lang: "zh_CN", // Language code, e.g. 'en', 'zh_CN', 'ja', etc.
 	themeColor: {
-		hue: 270, // Default hue for the theme color, from 0 to 360. e.g. red: 0, teal: 200, cyan: 250, pink: 345
+		hue: 345, // Default hue for the theme color, from 0 to 360. e.g. red: 0, teal: 200, cyan: 250, pink: 345
 		fixed: false, // Hide the theme color picker for visitors
 	},
 	banner: {
@@ -33,7 +33,7 @@ export const siteConfig: SiteConfig = {
 			// "https://example.com/3.png", // An http(s):// URL is used as is
 		],
 		// overlay: { light: 0.2, dark: 0.4 }, // Dimming overlay opacity, defaults shown
-		cardOpacity: { light: 0.75, dark: 0.77 }, // Card background opacity, defaults shown
+		// cardOpacity: { light: 0.75, dark: 0.77 }, // Card background opacity, defaults shown
 	},
 	toc: {
 		enable: true, // Display the table of contents on the right side of the post
