@@ -32,3 +32,6 @@ yarn.lock
 # ide
 .idea
 *.iml
+
+# 本地设计与实施文档
+docs/superpowers/
