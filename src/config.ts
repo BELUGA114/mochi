@@ -33,7 +33,7 @@ export const siteConfig: SiteConfig = {
 			// "https://example.com/3.png", // An http(s):// URL is used as is
 		],
 		// overlay: { light: 0.2, dark: 0.4 }, // Dimming overlay opacity, defaults shown
-		 cardOpacity: { light: 0.75, dark: 0.77 }, // Card background opacity, defaults shown
+		cardOpacity: { light: 0.75, dark: 0.77 }, // Card background opacity, defaults shown
 	},
 	toc: {
 		enable: true, // Display the table of contents on the right side of the post

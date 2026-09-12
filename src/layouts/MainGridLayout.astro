@@ -1,6 +1,7 @@
 ---
 import BackToTop from "@components/control/BackToTop.astro";
 import Footer from "@components/Footer.astro";
+import Wallpaper from "@components/misc/Wallpaper.astro";
 import Navbar from "@components/Navbar.astro";
 import SideBar from "@components/widget/SideBar.astro";
 import type { MarkdownHeading } from "astro";
@@ -14,7 +15,6 @@ import {
 	MAIN_PANEL_OVERLAPS_BANNER_HEIGHT,
 } from "../constants/constants";
 import type { OgImage } from "../utils/og-utils";
-import Wallpaper from "@components/misc/Wallpaper.astro";
 import Layout from "./Layout.astro";
 
 interface Props {
@@ -37,14 +37,12 @@ const {
 	headings = [],
 } = Astro.props;
 // 壁纸优先于顶部横幅：两者同时开启时只渲染壁纸
-const bannerEnabled =
-	siteConfig.banner.enable && !siteConfig.wallpaper?.enable;
+const bannerEnabled = siteConfig.banner.enable && !siteConfig.wallpaper?.enable;
 const wallpaper = siteConfig.wallpaper?.enable
 	? siteConfig.wallpaper
 	: undefined;
 
-const hasBannerCredit =
-	bannerEnabled && siteConfig.banner.credit.enable;
+const hasBannerCredit = bannerEnabled && siteConfig.banner.credit.enable;
 const hasBannerLink = !!siteConfig.banner.credit.url;
 
 const mainPanelTop = bannerEnabled

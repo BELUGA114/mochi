@@ -18,4 +18,7 @@ export const PAGE_WIDTH = 75;
 
 // Default wallpaper parameters, shared between Layout.astro and Wallpaper.astro
 export const WALLPAPER_OVERLAY_DEFAULT = { light: 0.2, dark: 0.4 } as const;
-export const WALLPAPER_CARD_OPACITY_DEFAULT = { light: 0.78, dark: 0.72 } as const;
+export const WALLPAPER_CARD_OPACITY_DEFAULT = {
+	light: 0.78,
+	dark: 0.72,
+} as const;
