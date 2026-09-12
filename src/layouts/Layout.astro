@@ -255,6 +255,22 @@ const bannerOffset =
 	html.dark body.enable-wallpaper .float-panel {
 		border-color: rgba(255, 255, 255, 0.12);
 	}
+
+	/* TOC 玻璃导轨：比正文卡淡一档；:has 限定文章页，避免空 TOC 页面出现空面板；
+	   mask 渐隐需去掉，否则边框被渐隐截断 */
+	body.enable-wallpaper:has(#post-container) #toc-inner-wrapper {
+		background-color: rgba(255, 255, 255, 0.5);
+		backdrop-filter: blur(16px) saturate(160%);
+		-webkit-backdrop-filter: blur(16px) saturate(160%);
+		border: 1px solid rgba(255, 255, 255, 0.6);
+		border-radius: var(--radius-large);
+		padding: 0 0.5rem;
+		mask-image: none;
+	}
+	html.dark body.enable-wallpaper:has(#post-container) #toc-inner-wrapper {
+		background-color: rgba(18, 18, 26, 0.5);
+		border-color: rgba(255, 255, 255, 0.1);
+	}
 }
 </style>
 

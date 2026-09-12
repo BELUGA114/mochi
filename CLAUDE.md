@@ -64,7 +64,9 @@ nearest declaring ancestor. Defaults (`WALLPAPER_OVERLAY_DEFAULT`, `WALLPAPER_CA
 `body.enable-wallpaper .card-base` / `.float-panel` add `backdrop-filter` blur + saturate, a 1px
 light border, and a soft shadow (the dark card base is tinted `rgba(18,18,26,…)` rather than pure black);
 the homepage mobile list wrapper in `PostPage.astro` is translucent but not `.card-base`, so it misses the
-blur.
+blur. The TOC gets a lighter glass rail on post pages, gated on `body.enable-wallpaper:has(#post-container)`
+— the `:has()` guard keeps the empty TOC placeholder on non-post pages from rendering an empty panel, and
+the `mask-image` fade is dropped there because it would cut the panel's border.
 
 ### Content collections
 
