@@ -30,6 +30,11 @@ export type SiteConfig = {
 			url?: string;
 		};
 	};
+	/**
+	 * Site-wide fixed wallpaper background. Takes precedence over `banner`:
+	 * when enabled, the top banner strip is not rendered.
+	 */
+	wallpaper?: WallpaperConfig;
 	toc: {
 		enable: boolean;
 		depth: 1 | 2 | 3;
@@ -43,6 +48,27 @@ export type SiteConfig = {
 	 * An `http(s)://` URL is used as is. Leave it out to emit no `og:image` at all.
 	 */
 	ogImage?: string;
+};
+
+export type WallpaperConfig = {
+	enable: boolean;
+	/**
+	 * Wallpaper image candidates. One entry = fixed wallpaper; multiple entries =
+	 * one is picked at random on each site visit / full page reload.
+	 * Same path rules as `banner.src`: relative to /src, or relative to /public
+	 * if it starts with '/'. An http(s):// URL is used as is.
+	 */
+	images: string[];
+	/**
+	 * Dimming overlay opacity over the wallpaper, for text readability.
+	 * Defaults to `{ light: 0.2, dark: 0.4 }`.
+	 */
+	overlay?: { light: number; dark: number };
+	/**
+	 * Card background opacity, lets the wallpaper show through content cards.
+	 * Defaults to `{ light: 0.78, dark: 0.72 }`.
+	 */
+	cardOpacity?: { light: number; dark: number };
 };
 
 export type Favicon = {

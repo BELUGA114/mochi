@@ -25,6 +25,16 @@ export const siteConfig: SiteConfig = {
 			url: "", // (Optional) URL link to the original artwork or artist's page
 		},
 	},
+	wallpaper: {
+		enable: false, // Site-wide fixed wallpaper background. Takes precedence over the banner above when enabled
+		images: [
+			// "assets/images/wallpapers/1.webp", // Relative to the /src directory
+			// "/wallpapers/2.jpg", // Relative to the /public directory if it starts with '/'
+			// "https://example.com/3.png", // An http(s):// URL is used as is
+		],
+		// overlay: { light: 0.2, dark: 0.4 }, // Dimming overlay opacity, defaults shown
+		// cardOpacity: { light: 0.78, dark: 0.72 }, // Card background opacity, defaults shown
+	},
 	toc: {
 		enable: true, // Display the table of contents on the right side of the post
 		depth: 2, // Maximum heading depth to show in the table, from 1 to 3

@@ -1,0 +1,68 @@
+---
+import path from "node:path";
+import type { WallpaperConfig } from "@/types/config";
+import { WALLPAPER_OVERLAY_DEFAULT } from "@constants/constants";
+import { url } from "@utils/url-utils";
+
+interface Props {
+	config: WallpaperConfig;
+}
+
+const { config } = Astro.props;
+
+if (config.images.length === 0) {
+	console.error(
+		"\n[ERROR] siteConfig.wallpaper is enabled but images is empty.",
+	);
+}
+
+const overlay = { ...WALLPAPER_OVERLAY_DEFAULT, ...config.overlay };
+
+// Resolve configured paths to runtime URLs, following ImageWrapper's conventions:
+// '/...' from /public via url(), http(s) as is, otherwise /src-relative via import.meta.glob
+const files = import.meta.glob<ImageMetadata>("../../**", {
+	import: "default",
+});
+const resolvedImages: string[] = [];
+for (const src of config.images) {
+	if (src.startsWith("/")) {
+		resolvedImages.push(url(src));
+		continue;
+	}
+	if (src.startsWith("http")) {
+		resolvedImages.push(src);
+		continue;
+	}
+	const normalizedPath = path
+		.normalize(path.join("../../", src))
+		.replace(/\\/g, "/");
+	const file = files[normalizedPath];
+	if (!file) {
+		console.error(
+			`\n[ERROR] Wallpaper image not found: ${normalizedPath.replace("../../", "src/")}`,
+		);
+		continue;
+	}
+	const metadata = await file();
+	resolvedImages.push(metadata.src);
+}
+---
+
+{resolvedImages.length > 0 && (
+<div id="wallpaper" class="fixed inset-0 -z-10 pointer-events-none overflow-hidden">
+	<img id="wallpaper-img" class="w-full h-full object-cover transition duration-700 opacity-0" alt="" />
+	<div class="absolute inset-0 dark:hidden" style={`background: rgba(0,0,0,${overlay.light})`}></div>
+	<div class="absolute inset-0 hidden dark:block" style={`background: rgba(0,0,0,${overlay.dark})`}></div>
+</div>
+)}
+
+<script is:inline define:vars={{ wallpaperImages: resolvedImages }}>
+	// Pick one wallpaper at random per visit. #wallpaper lives outside the swup
+	// containers, so this script only re-runs on a full page reload.
+	const img = document.getElementById("wallpaper-img");
+	if (img) {
+		img.onload = () => img.classList.remove("opacity-0");
+		img.src =
+			wallpaperImages[Math.floor(Math.random() * wallpaperImages.length)];
+	}
+</script>

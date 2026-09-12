@@ -14,6 +14,7 @@ import {
 	DEFAULT_THEME,
 	LIGHT_MODE,
 	PAGE_WIDTH,
+	WALLPAPER_CARD_OPACITY_DEFAULT,
 } from "../constants/constants";
 import { defaultFavicons } from "../constants/icon";
 import type { Favicon } from "../types/config";
@@ -48,7 +49,14 @@ if (!banner || typeof banner !== "string" || banner.trim() === "") {
 // TODO don't use post cover as banner for now
 banner = siteConfig.banner.src;
 
-const enableBanner = siteConfig.banner.enable;
+const enableWallpaper = !!siteConfig.wallpaper?.enable;
+// 壁纸优先于顶部横幅：两者同时开启时只渲染壁纸，避免 enable-banner 撑高顶栏区域
+const enableBanner = siteConfig.banner.enable && !enableWallpaper;
+
+const wallpaperCardOpacity = {
+	...WALLPAPER_CARD_OPACITY_DEFAULT,
+	...siteConfig.wallpaper?.cardOpacity,
+};
 
 let pageTitle: string;
 if (title) {
@@ -171,7 +179,7 @@ const bannerOffset =
 		<link rel="alternate" type="application/rss+xml" title={profileConfig.name} href={`${Astro.site}rss.xml`}/>
 
 	</head>
-	<body class=" min-h-screen transition " class:list={[{"lg:is-home": isHomePage, "enable-banner": enableBanner}]}
+	<body class=" min-h-screen transition " class:list={[{"lg:is-home": isHomePage, "enable-banner": enableBanner, "enable-wallpaper": enableWallpaper}]}
 		  data-overlayscrollbars-initialize
 	>
 		<ConfigCarrier></ConfigCarrier>
@@ -186,6 +194,8 @@ const bannerOffset =
 	bannerOffset,
 	'banner-height-home': `${BANNER_HEIGHT_HOME}vh`,
 	'banner-height': `${BANNER_HEIGHT}vh`,
+	'wallpaper-card-bg-light': `rgba(255, 255, 255, ${wallpaperCardOpacity.light})`,
+	'wallpaper-card-bg-dark': `rgba(0, 0, 0, ${wallpaperCardOpacity.dark})`,
 }}>
 @tailwind components;
 @layer components {
@@ -213,6 +223,14 @@ const bannerOffset =
 	}
 	.navbar-hidden {
 		@apply opacity-0 -translate-y-16
+	}
+
+	/* 声明在 body 上而非 :root，才能以"最近声明祖先"覆盖 variables.styl 的 :root/.dark 定义 */
+	body.enable-wallpaper {
+		--card-bg: var(--wallpaper-card-bg-light);
+	}
+	html.dark body.enable-wallpaper {
+		--card-bg: var(--wallpaper-card-bg-dark);
 	}
 }
 </style>

@@ -44,6 +44,24 @@ client JS needs a new config value, add it there rather than importing the confi
 Layout-geometry constants (banner heights, page width, `PAGE_SIZE`, theme mode names) live in
 `src/constants/constants.ts` and are shared between the Astro/CSS side and the inline scripts.
 
+### Wallpaper background
+
+`siteConfig.wallpaper` (optional, currently disabled) renders `src/components/misc/Wallpaper.astro` from
+`MainGridLayout.astro` on every page: a `fixed inset-0 -z-10` image layer plus a darkening overlay, with a
+random image picked per site visit by an `is:inline` script (one entry in `images` = fixed wallpaper,
+several = random per full page reload). Image paths follow `banner.src` rules and are resolved at build
+time with the same `import.meta.glob` conventions as `ImageWrapper.astro`; runtime-random `<img src>`
+means Astro `<Image>` optimization does not apply. `#wallpaper` sits outside the Swup containers, so it
+persists across in-site navigations — do not move it inside them.
+
+Wallpaper takes precedence over the banner: the banner strip, `enable-banner` body class, `toc-hide`, and
+`mainPanelTop` are gated on `banner.enable && !wallpaper.enable` in both `Layout.astro` and
+`MainGridLayout.astro` — keep the two expressions in sync. When enabled, cards turn translucent: `--card-bg`
+is overridden on `body.enable-wallpaper` in `Layout.astro`'s global style block. That override must stay on
+`body` — `variables.styl` declares `--card-bg` on `:root`/`:root.dark`, and custom properties resolve to the
+nearest declaring ancestor. Defaults (`WALLPAPER_OVERLAY_DEFAULT`, `WALLPAPER_CARD_OPACITY_DEFAULT`) live in
+`src/constants/constants.ts`.
+
 ### Content collections
 
 `src/content/config.ts` defines two collections: `posts` (schema-validated frontmatter) and `spec` (the

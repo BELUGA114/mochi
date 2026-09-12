@@ -14,6 +14,7 @@ import {
 	MAIN_PANEL_OVERLAPS_BANNER_HEIGHT,
 } from "../constants/constants";
 import type { OgImage } from "../utils/og-utils";
+import Wallpaper from "@components/misc/Wallpaper.astro";
 import Layout from "./Layout.astro";
 
 interface Props {
@@ -35,11 +36,18 @@ const {
 	ogImage,
 	headings = [],
 } = Astro.props;
+// 壁纸优先于顶部横幅：两者同时开启时只渲染壁纸
+const bannerEnabled =
+	siteConfig.banner.enable && !siteConfig.wallpaper?.enable;
+const wallpaper = siteConfig.wallpaper?.enable
+	? siteConfig.wallpaper
+	: undefined;
+
 const hasBannerCredit =
-	siteConfig.banner.enable && siteConfig.banner.credit.enable;
+	bannerEnabled && siteConfig.banner.credit.enable;
 const hasBannerLink = !!siteConfig.banner.credit.url;
 
-const mainPanelTop = siteConfig.banner.enable
+const mainPanelTop = bannerEnabled
 	? `calc(${BANNER_HEIGHT}vh - ${MAIN_PANEL_OVERLAPS_BANNER_HEIGHT}rem)`
 	: "5.5rem";
 ---
@@ -55,12 +63,15 @@ const mainPanelTop = siteConfig.banner.enable
 </div>
 
 <!-- Banner -->
-{siteConfig.banner.enable && <div id="banner-wrapper" class={`absolute z-10 w-full transition duration-700 overflow-hidden`} style={`top: -${BANNER_HEIGHT_EXTEND}vh`}>
+{bannerEnabled && <div id="banner-wrapper" class={`absolute z-10 w-full transition duration-700 overflow-hidden`} style={`top: -${BANNER_HEIGHT_EXTEND}vh`}>
     <ImageWrapper id="banner" alt="Banner image of the blog" class:list={["object-cover h-full transition duration-700 opacity-0 scale-105"]}
                   src={siteConfig.banner.src} position={siteConfig.banner.position}
     >
     </ImageWrapper>
 </div>}
+
+<!-- Site-wide wallpaper background, outside the swup containers so it persists across navigations -->
+{wallpaper && <Wallpaper config={wallpaper} />}
 
 <!-- Main content -->
 <div class="absolute w-full z-30 pointer-events-none" style={`top: ${mainPanelTop}`}>
@@ -110,7 +121,7 @@ const mainPanelTop = siteConfig.banner.enable
     <div class="relative max-w-[var(--page-width)] mx-auto">
         <!-- TOC component -->
         {siteConfig.toc.enable && <div id="toc-wrapper" class:list={["hidden lg:block transition absolute top-0 -right-[var(--toc-width)] w-[var(--toc-width)] items-center",
-            {"toc-hide": siteConfig.banner.enable}]}
+            {"toc-hide": bannerEnabled}]}
         >
             <div id="toc-inner-wrapper" class="fixed top-14 w-[var(--toc-width)] h-[calc(100vh_-_20rem)] overflow-y-scroll overflow-x-hidden hide-scrollbar">
                 <div id="toc" class="w-full h-full transition-swup-fade ">
