@@ -195,7 +195,8 @@ const bannerOffset =
 	'banner-height-home': `${BANNER_HEIGHT_HOME}vh`,
 	'banner-height': `${BANNER_HEIGHT}vh`,
 	'wallpaper-card-bg-light': `rgba(255, 255, 255, ${wallpaperCardOpacity.light})`,
-	'wallpaper-card-bg-dark': `rgba(0, 0, 0, ${wallpaperCardOpacity.dark})`,
+	// 暗色基色用带蓝的黑而非纯黑，毛玻璃下更有"玻璃感"（参考站做法）
+	'wallpaper-card-bg-dark': `rgba(18, 18, 26, ${wallpaperCardOpacity.dark})`,
 }}>
 @tailwind components;
 @layer components {
@@ -228,9 +229,31 @@ const bannerOffset =
 	/* 声明在 body 上而非 :root，才能以"最近声明祖先"覆盖 variables.styl 的 :root/.dark 定义 */
 	body.enable-wallpaper {
 		--card-bg: var(--wallpaper-card-bg-light);
+		--float-panel-bg: rgba(255, 255, 255, 0.86);
 	}
 	html.dark body.enable-wallpaper {
 		--card-bg: var(--wallpaper-card-bg-dark);
+		--float-panel-bg: rgba(22, 22, 32, 0.86);
+	}
+
+	/* 毛玻璃：模糊 + 提饱和 + 细边框 + 柔和阴影（数值取自参考站，浮层用更强一档的模糊） */
+	body.enable-wallpaper .card-base {
+		border: 1px solid rgba(255, 255, 255, 0.7);
+		box-shadow: 0 8px 30px rgba(0, 0, 0, 0.04);
+		backdrop-filter: blur(20px) saturate(180%);
+		-webkit-backdrop-filter: blur(20px) saturate(180%);
+	}
+	html.dark body.enable-wallpaper .card-base {
+		border-color: rgba(255, 255, 255, 0.12);
+		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.36);
+	}
+	body.enable-wallpaper .float-panel {
+		border: 1px solid rgba(255, 255, 255, 0.7);
+		backdrop-filter: blur(24px) saturate(190%);
+		-webkit-backdrop-filter: blur(24px) saturate(190%);
+	}
+	html.dark body.enable-wallpaper .float-panel {
+		border-color: rgba(255, 255, 255, 0.12);
 	}
 }
 </style>

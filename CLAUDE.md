@@ -60,7 +60,11 @@ Wallpaper takes precedence over the banner: the banner strip, `enable-banner` bo
 is overridden on `body.enable-wallpaper` in `Layout.astro`'s global style block. That override must stay on
 `body` — `variables.styl` declares `--card-bg` on `:root`/`:root.dark`, and custom properties resolve to the
 nearest declaring ancestor. Defaults (`WALLPAPER_OVERLAY_DEFAULT`, `WALLPAPER_CARD_OPACITY_DEFAULT`) live in
-`src/constants/constants.ts`.
+`src/constants/constants.ts`. Cards also get a frosted-glass treatment in the same style block:
+`body.enable-wallpaper .card-base` / `.float-panel` add `backdrop-filter` blur + saturate, a 1px
+light border, and a soft shadow (the dark card base is tinted `rgba(18,18,26,…)` rather than pure black);
+the homepage mobile list wrapper in `PostPage.astro` is translucent but not `.card-base`, so it misses the
+blur.
 
 ### Content collections
 
