@@ -26,14 +26,14 @@ export const siteConfig: SiteConfig = {
 		},
 	},
 	wallpaper: {
-		enable: false, // Site-wide fixed wallpaper background. Takes precedence over the banner above when enabled
+		enable: true, // Site-wide fixed wallpaper background. Takes precedence over the banner above when enabled
 		images: [
-			// "assets/images/wallpapers/1.webp", // Relative to the /src directory
+			"assets/images/wallpapers/1.jpg", // Relative to the /src directory
 			// "/wallpapers/2.jpg", // Relative to the /public directory if it starts with '/'
 			// "https://example.com/3.png", // An http(s):// URL is used as is
 		],
 		// overlay: { light: 0.2, dark: 0.4 }, // Dimming overlay opacity, defaults shown
-		// cardOpacity: { light: 0.78, dark: 0.72 }, // Card background opacity, defaults shown
+		 cardOpacity: { light: 0.75, dark: 0.77 }, // Card background opacity, defaults shown
 	},
 	toc: {
 		enable: true, // Display the table of contents on the right side of the post
