@@ -14,30 +14,22 @@ draft: false
 
 配置基于 Xray v26.9.8 的字段名，示例统一使用以下占位：`domain.com` 为主域名，`cf1.domain.com` / `cf2.domain.com` / `cf3.domain.com` 为开启橙云的子域，`/yourpath` 为 XHTTP path，`vpsadmin` 账户运行 Xray，证书目录 `~/xray_cert`。
 
-## 分包上行、流式下行
-
-CDN 和大多数 HTTP 中间盒为保护源站，除了有特殊支持的 WS、gRPC 外，一般会缓存完整个请求再回源。Tor 的 Meek 协议把往返流量都包装成 HTTP 请求来穿透这类中间盒，但是速率极低。
-
-XHTTP 只把上行包装为一个个 POST 请求，下行用一个长期的 GET 流式返回。下行响应头带 `X-Accel-Buffering: no`（禁用中间盒缓冲）、`Cache-Control: no-store`（无需缓存）、`Content-Type: text/event-stream`（伪装成 SSE）。从网站下载大文件时 CDN 回源不会等源站发完整个文件，而是来多少转发多少，XHTTP 的流式下行建立在这个行为上，所以最重要的下行速率可以拉满。上行速率本来打折，后来加了 stream-up 流式上行补齐，并且几轮优化后 packet-up 的速率也直追 stream-up。
-
 ## 优势
 
 - XMUX：H2/H3 的 0-RTT 多路复用控制
 - 上下行分离：服务端仅按 path 中随机生成的 UUID 关联上下行，两个方向可以走完全不同的入口
-- Header padding（`xPaddingBytes`，默认 100-1000 随机）：请求头的 padding 放在 `Referer: ...?x_padding=XXX...`，响应头用 `X-Padding`，消除固定长度特征；位置、键名、内容样式均可混淆
 - 请求元数据混淆：会话 ID、seq、上行数据的载体（path / query / header / cookie）与形态都可配置、随机化，避免在 CDN 里留下固定模式
 - `extra` 分享机制：`host`、`path`、`mode` 以外的所有参数可整块塞进分享链接，由服务发布者下发
 - Browser Dialer：用真浏览器的网络栈和 TLS 指纹发请求
-- 无需 gRPC 库，性能更好，下行是独立 GET 不受 CDN 对 gRPC 的限速，相比 WS/HTTPUpgrade，没有 `ALPN = http/1.1` 的显著特征
-- 服务端可藏在真正的 Nginx/Caddy 后面，指纹特征比裸跑 quic-go 少得多
+- 无需 gRPC 库，性能更好，下行是独立 GET 不受 CDN 对 gRPC 的限速，相比 WS/HTTPUpgrade，没有 `ALPN = http/1.1` 的特征
 
-## 三种模式
+## 模式
 
-| 模式       | 上行                           | 下行     | HTTP 请求数 | 说明                                 |
-| ---------- | ------------------------------ | -------- | ----------- | ------------------------------------ |
-| packet-up  | 分包 POST `/path/UUID/seq`     | GET 流式 | N 个        | 兼容性最强，auto 的默认选择          |
-| stream-up  | 流式 POST `/path/UUID`         | GET 流式 | 2 个        | 上行不牺牲效率，上下行可分离         |
-| stream-one | 单个 POST `/path/`，响应即下行 | 同一请求 | 1 个        | 最接近普通请求形状，REALITY 直连默认 |
+| 模式       | 上行                           | 下行     | HTTP 请求数 | 说明                         |
+| ---------- | ------------------------------ | -------- | ----------- | ---------------------------- |
+| packet-up  | 分包 `POST /path/UUID/seq`     | GET 流式 | N 个        | 兼容性最强                   |
+| stream-up  | 流式 `POST /path/UUID`         | GET 流式 | 2 个        | 上行不牺牲效率，上下行可分离 |
+| stream-one | 单个 `POST /path/`，响应即下行 | 同一请求 | 1 个        | 最接近普通请求，REALITY 默认 |
 
 **"mode" 四选一，客户端、服务端默认值都是 "auto"：**
 
@@ -59,11 +51,11 @@ XHTTP 只把上行包装为一个个 POST 请求，下行用一个长期的 GET 
 - `scMinPostsIntervalMs`：仅客户端，单个代理请求内 POST 的最小间隔，默认 30ms
 - `scMaxBufferedPosts`：仅服务端，最多缓存的 POST 数，默认 30
 
-前两个建议填范围字符串（如 `"500000-1000000"`）每次随机，减少指纹。三者均基于单个代理请求独立计数，即 sc = sub-connection。
+前两个建议填范围字符串（如 `"500000-1000000"`）每次随机，减少指纹。三者均基于单个代理请求独立计数。
 
 **stream-up 专属参数**：
 
-- `scStreamUpServerSecs`：仅服务端，默认 `"20-80"` 随机，每隔该时长向 stream-up 上行 POST 的响应方向写 `xPaddingBytes` 个字节保活（前提是请求带了 padding，默认总是带）。存在原因是 CF 会掐断下行 100 秒无实际数据的 HTTP，而 stream-up 的上行 POST 的响应方向会被这个机制掐断。设 `-1` 停发保活数据
+- `scStreamUpServerSecs`：仅服务端，默认 `"20-80"` 随机，每隔该时长向 stream-up 上行 POST 的响应方向写 `xPaddingBytes` 个字节保活（前提是请求带了 padding，默认总是带），设 `-1` 停发保活数据
 
 ## XMUX
 
@@ -78,18 +70,19 @@ H2/H3 均为 0-RTT 多路复用，XMUX 是控制它们的核心接口：
 | `hMaxReusableSecs` | 一条连接的最长复用时长（对付 Nginx 一小时上限）                     | `"1800-3000"` 随机 |
 | `hKeepAlivePeriod` | 空闲时 H2/H3 保活间隔（秒），0 为 Chrome H2 45s / quic-go 10s       | 0                  |
 
+多线程测速前可设 `"maxConcurrency": 1`，只用一条底层连接复用到底可以设 `"maxConnections": 1`，日常可保持全 0。
+
 **用法上的注意：**
 
 - `maxConcurrency` 与 `maxConnections` 冲突（都大于 0 直接报错），只能二选一
 - `hKeepAlivePeriod` 是唯一不允许填范围的项（该值取随机本身才是特征），且允许负数（-1 关闭空闲保活）
 - 填了任意一项后其余项就没有默认值了，须全部显式填写
 - packet-up 循环 POST 超过 `hMaxRequestTimes` / `hMaxReusableSecs` 时会自动切换到另一条连接，占一次 reuseTimes 但不占 concurrency
-- 早期的 `maxConcurrency: "16-32"` 改为固定 6 条连接，v26.7.28 起降为固定 3 条，配合随机的 `hMaxRequestTimes` / `hMaxReusableSecs`，相当于固定维持 3 条底层连接、到期整体换新
 - 使用 XHTTP 时不要启用 mux.cool，新版服务端已检查，只接受纯 XUDP
 
 ## 请求混淆
 
-padding 默认放在 `Referer: /yourpath?x_padding=XXXX...`，会话 ID 和 seq 默认以 UUID / 数字形式拼在 path 里。这些在 CDN、反代的访问日志与 WAF 规则里都是显眼的模式，后续版本加入了一组混淆参数，把这些元数据挪走并随机化
+padding 默认放在 `Referer: /yourpath?x_padding=XXXX...`，这些在 CDN、反代的访问日志与 WAF 规则里都是显眼的模式，后续版本加入了混淆参数，把元数据挪走并随机化
 
 | 参数                                 | 作用                                                                     | 默认值                                  |
 | ------------------------------------ | ------------------------------------------------------------------------ | --------------------------------------- |
@@ -146,17 +139,6 @@ REALITY 时客户端固定使用 H2，XTLS/Vision 只在 TCP+TLS/REALITY 下可�
 纯直连、要单流拉满带宽、服务器 CPU 不富裕、跑 Linux，适合 RAW。
 
 网页浏览（大量小连接，0-RTT 收益直接）、要上下行分离、要过 CDN 或前置反代，适合 XHTTP。
-
-### REALITY 能否套 CDN
-
-不能，REALITY 的伪装靠客户端把认证数据藏在 ClientHello，服务端识别合法请求后借用 `target` 站的握手外观返回自签临时证书，鉴权失败的流量原样转发给 `target`。这要求客户端的 TLS 握手直接落在服务器上，而 CDN 用自己的证书跟客户端握手，ClientHello 到不了源站，REALITY 断在第一步。
-
-能过 CDN 的是 XHTTP 传输层本身，但必须 `security: "tls"` 加自己域名的真证书，REALITY 和 CDN 只能二选一。
-
-但是还可以考虑：
-
-1. 上下行分离混搭：上/下行 REALITY 直连、下/上行 CDN TLS H3，两个方向各自完整用自己那套传输安全，服务端按 UUID 关联
-2. 同入站双入口：CDN 入口和 REALITY 入口以同一 path 抵达同一 XHTTP 入站，客户端按网络环境选用
 
 ## 玩法与示例配置
 
@@ -285,7 +267,7 @@ H2 且要流式上行时显式指定 `mode`（需 CF 面板开 gRPC 支持）：
 }
 ```
 
-packet-up 已是默认模式无需指定；若 CDN 对请求体大小敏感，可调分包节奏：
+若 CDN 对请求体大小敏感，可调分包节奏：
 
 ```json title="客户端"
 "xhttpSettings": {
@@ -297,7 +279,7 @@ packet-up 已是默认模式无需指定；若 CDN 对请求体大小敏感，�
 }
 ```
 
-客户端连 CF 边缘 IP，SNI 为 cf1，CF 用边缘证书（Universal SSL）握手。默认（auto = packet-up）上行是分包 `POST /yourpath/UUID/seq`，下行是独立 `GET /yourpath/UUID`；显式 `"stream-up"` 时上行才变成流式 `POST /yourpath/UUID`（带 gRPC 伪装头）。CF 按 Host 回源到 VPS 的端口，验证 Origin 证书后转发给 Xray。H3 版客户端跑 quic-go QUIC，到 CF 被降成 H1/H2 回源，服务端无需监听 UDP。
+客户端连 CF 边缘 IP，SNI 为 cf1，CF 用边缘证书握手，按 Host 回源到 VPS 的端口，验证 Origin 证书后转发给 Xray。H3 版客户端跑 quic-go QUIC，到 CF 被降成 H1/H2 回源，服务端无需监听 UDP。
 
 CF 会掐断下行 100 秒无实际数据的 HTTP，代理长连接需应用层保活，比如 sshd 的 `ClientAliveInterval`。
 
@@ -582,26 +564,6 @@ server {
 
 上行 `POST /yourpath/UUID` 直连 VPS 443，先过 REALITY 鉴权，解密后首包是 H2 preface 而非合法 VLESS，回落至 127.0.0.1:1234。下行 `GET /yourpath/UUID` 走 CF 的 QUIC H3，CF 回源到 8443 的 Nginx 再转给同一个 127.0.0.1:1234，两方按 UUID 汇合。
 
-两个代价：`xver` 填 0 是因为 Nginx 那条路不发 PROXY protocol，入站不能强制要求它，REALITY 入口日志里源 IP 会是 127.0.0.1，并且链路多一跳就多一处能坏的地方。
-
-### XMUX 调参指南
-
-```json title="客户端"
-// 多线程测速前：一条底层连接只承载一个代理请求
-"extra": { "xmux": {
-  "maxConcurrency": 1, "maxConnections": 0, "cMaxReuseTimes": 0,
-  "hMaxRequestTimes": 0, "hMaxReusableSecs": 0, "hKeepAlivePeriod": 0
-}}
-
-// 只用一条底层连接复用到底
-"extra": { "xmux": {
-  "maxConcurrency": 0, "maxConnections": 1, "cMaxReuseTimes": 0,
-  "hMaxRequestTimes": 0, "hMaxReusableSecs": 0, "hKeepAlivePeriod": 0
-}}
-```
-
-日常保持全 0。默认相当于固定维持 3 条底层连接、随 `hMaxRequestTimes` / `hMaxReusableSecs` 到期整体换新，不会有 gRPC、HTTP 传输层始终复用同一条连接导致的断流体验，也没有连接数固定特征。
-
 ### Browser Dialer
 
 ```bash title="客户端"
@@ -615,9 +577,7 @@ XRAY_BROWSER_DIALER=127.0.0.1:8080 ./xray -c config.json
 - 非 80/443 的端口已支持（2026-04 起，端口会自动拼进交给浏览器的 URL）
 - 浏览器到服务端必须直连
 
-流量走向：Xray 不自己建 TLS，把 "连到 `https://cf1.domain.com/yourpath`" 这个动作交给页面里的 JS，浏览器用自己真实的网络栈和 TLS 指纹发出，数据经本地 WebSocket 回到 Xray，指纹是真的，但有一定的性能损耗。
-
-XHTTP 不能开 mux.cool，要压浏览器连接数就调大 XMUX 的 `maxConcurrency`。
+Xray 把 "连接 `https://cf1.domain.com/yourpath`" 的动作交给页面里的 JS，浏览器用自己真实的网络栈和 TLS 指纹发出，数据经本地 WebSocket 回到 Xray，指纹是真的，但有一定的性能损耗。
 
 ### FinalMask 给 H3 调拥塞控制
 
@@ -641,9 +601,9 @@ XHTTP H3 无协商机制，用不了 `brutal`，只能用免协商的 `force-bru
 
 ## 域名与 Cloudflare
 
-橙云子域：CF 代理流量，可做 CDN 优选、域前置门面、回源目标。客户端握 TLS 时根本看不到 VPS 上的证书，CF 用自己的边缘证书握手；你的证书只用于 CF 回源那一跳。
+橙云子域：CF 代理流量，可做 CDN 优选、域前置、回源目标。
 
-灰云子域：CF 只做 DNS 解析、不代理。适合给直连/REALITY 节点当 `address`，只有灰云才解析出 VPS 真实 IP。
+灰云子域：CF 只做 DNS 解析、不代理。适合给直连节点当 `address`，只有灰云才解析出 VPS 真实 IP。
 
 当面板 SSL 模式为 Flexible 时，CF 回源走明文 HTTP，建议使用 Full (strict) 并配证书。
 
@@ -730,7 +690,6 @@ chmod +r ~/xray_cert/xray.crt
 
 ## 注意事项
 
-- CF 掐断下行 100 秒无实际数据的 HTTP，长连接要做应用层保活（sshd 设 `ClientAliveInterval`）；stream-up 上行被掐，在服务端设置 `scStreamUpServerSecs`
 - packet-up 和 `Referer` 长 padding 会刷出大量长日志，建议在反代软件里指定不记录；开启混淆（`tokenish` + 自定义键名）后日志形态也不再扎眼
 - `address` 填优选 IP 时 `serverName` 必填，且 IP 不能当 SNI，留空则无 SNI 扩展，CF 会拒
 - v26.9.8 起 REALITY 服务端强制 ClientHello 携带 X25519MLKEM768，奇怪和过时指纹会直接被当回落流量处理
