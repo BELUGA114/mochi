@@ -2,6 +2,25 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+Read this file for orientation. Details live in module-level `CLAUDE.md` files next to the code they
+describe, which load when you read files in that directory — follow the pointer for the area you are
+touching rather than assuming this file is the whole story:
+
+| Area | Doc | Covers |
+|:--|:--|:--|
+| `src/layouts/` | [`CLAUDE.md`](src/layouts/CLAUDE.md) | Swup hook registration, theming bootstrap, global CSS vars, banner/wallpaper gating, card glass |
+| `src/components/` | [`CLAUDE.md`](src/components/CLAUDE.md) | config→client boundary, Svelte runes trap, Pagefind search, archive panel |
+| `src/utils/` | [`CLAUDE.md`](src/utils/CLAUDE.md) | content-utils post helpers, URL builders, theme writes, og image |
+| `src/plugins/` | [`CLAUDE.md`](src/plugins/CLAUDE.md) | remark/rehype chain, directives, Expressive Code plugins |
+| `src/styles/` | [`CLAUDE.md`](src/styles/CLAUDE.md) | Tailwind/Stylus/PostCSS, `:root` tokens, the `.onload-animation` trap |
+| `src/i18n/` | [`CLAUDE.md`](src/i18n/CLAUDE.md) | translation contract, adding a language |
+
+`docs/blog-maintenance.zh-CN.md` is the Chinese-language maintenance guide (what to edit to change what).
+
+When adding a module doc, do **not** put a `CLAUDE.md` in `src/pages/` or `src/content/posts/` —
+Astro treats files there as routes and content entries, so it would ship as a real page or fail the
+`posts` schema validation. Biome ignores markdown, so a `.md` file anywhere else under `src/` is inert.
+
 ## Project
 
 Static blog built from the [Fuwari](https://github.com/saicaca/fuwari) Astro template, live at
@@ -37,67 +56,17 @@ Commits for commit messages.
 `src/config.ts` exports `siteConfig`, `navBarConfig`, `profileConfig`, `licenseConfig`, and
 `expressiveCodeConfig`, all typed by `src/types/config.ts`. It is consumed at build time by layouts,
 components, and even `astro.config.mjs` (which imports `expressiveCodeConfig` for the code-block theme).
-Values needed by client-side code cross the boundary through `ConfigCarrier.astro`, which renders a
-`#config-carrier` element with `data-hue`; `src/utils/setting-utils.ts` reads it back in the browser. If
-client JS needs a new config value, add it there rather than importing the config into a Svelte island.
+Values needed by client-side code cross the boundary through `ConfigCarrier.astro` and
+`src/utils/setting-utils.ts` — see `src/components/CLAUDE.md`.
 
 Layout-geometry constants (banner heights, page width, `PAGE_SIZE`, theme mode names) live in
 `src/constants/constants.ts` and are shared between the Astro/CSS side and the inline scripts.
 
-### Wallpaper background
-
-`siteConfig.wallpaper` (optional, currently disabled) renders `src/components/misc/Wallpaper.astro` from
-`MainGridLayout.astro` on every page: a `fixed inset-0 -z-10` image layer plus a darkening overlay, with a
-random image picked per site visit by an `is:inline` script (one entry in `images` = fixed wallpaper,
-several = random per full page reload). Image paths follow `banner.src` rules and are resolved at build
-time with the same `import.meta.glob` conventions as `ImageWrapper.astro`; runtime-random `<img src>`
-means Astro `<Image>` optimization does not apply. `#wallpaper` sits outside the Swup containers, so it
-persists across in-site navigations — do not move it inside them.
-
-Wallpaper takes precedence over the banner: the banner strip, `enable-banner` body class, `toc-hide`, and
-`mainPanelTop` are gated on `banner.enable && !wallpaper.enable` in both `Layout.astro` and
-`MainGridLayout.astro` — keep the two expressions in sync. When enabled, cards turn translucent: `--card-bg`
-is overridden on `body.enable-wallpaper` in `Layout.astro`'s global style block. That override must stay on
-`body` — `variables.styl` declares `--card-bg` on `:root`/`:root.dark`, and custom properties resolve to the
-nearest declaring ancestor. Defaults (`WALLPAPER_OVERLAY_DEFAULT`, `WALLPAPER_CARD_OPACITY_DEFAULT`) live in
-`src/constants/constants.ts`. Cards also get a frosted-glass treatment in the same style block:
-`body.enable-wallpaper .card-base` / `.float-panel` add `backdrop-filter` blur + saturate, a 1px
-light border, and a soft shadow (the dark card base is tinted `rgba(18,18,26,…)` rather than pure black);
-the homepage list wrapper in `PostPage.astro` carries no surface of its own (transparent at every breakpoint,
-card gaps via `gap-4`) so the per-card glass is the only translucent layer — a second translucent layer there
-would stack with the cards' own background and crush the wallpaper to ~5% visibility. The TOC gets a lighter glass rail on post pages, gated on `body.enable-wallpaper:has(#post-container)`
-— the `:has()` guard keeps the empty TOC placeholder on non-post pages from rendering an empty panel, and
-the `mask-image` fade is dropped there because it would cut the panel's border.
-
-Chromium silently disables `backdrop-filter` when any ancestor keeps an animation-filled state: an ancestor
-with an opacity animation plus `animation-fill-mode: forwards` becomes a backdrop root, so descendant cards
-blur only content inside that subtree — the wallpaper is outside it, so the glass looks transparent-but-flat.
-That is why `.onload-animation` in `src/styles/transition.css` uses `backwards` with no base `opacity: 0`
-(`forwards` + `opacity: 0` breaks the glass in Chrome while Firefox keeps working, so the bug is invisible
-in a Firefox-only check). Elements with `.onload-animation` are `#navbar`, `#sidebar`, `#content-wrapper`,
-the footer, and post/list items; `#toc-inner-wrapper` has no such ancestor, which is why the TOC rail was the
-one surface that looked right in Chrome.
-
-### Content collections
-
-`src/content/config.ts` defines two collections: `posts` (schema-validated frontmatter) and `spec` (the
-`about.md` body, empty schema). The `posts` schema includes `prevTitle`/`prevSlug`/`nextTitle`/`nextSlug`
-marked "for internal use" — these are **not** authored in frontmatter; `getSortedPosts()` in
-`src/utils/content-utils.ts` fills them in after sorting. Read post data through those helpers, not
-`getCollection` directly, or you lose the prev/next wiring.
-
-Draft handling: every collection query filters with `import.meta.env.PROD ? data.draft !== true : true`, so
-drafts render in `pnpm dev` and disappear from builds. That predicate is repeated in three functions in
-`content-utils.ts` — keep them in sync.
-
-`getSortedPostsList()` exists specifically to strip `post.body` before serializing posts into the Svelte
-archive island; use it for anything crossing into client-side props.
-
 ### Routing and URLs
 
 `astro.config.mjs` sets `trailingSlash: "always"` and a configurable `base`. Always build internal links
-with `url()` / `getPostUrlBySlug()` / `getTagUrl()` / `getCategoryUrl()` from `src/utils/url-utils.ts` —
-never hardcode paths, or the site breaks under a non-root `base`.
+with the helpers in `src/utils/url-utils.ts` — never hardcode paths, or the site breaks under a non-root
+`base`. Details in `src/utils/CLAUDE.md`.
 
 - `src/pages/[...page].astro` — paginated index (`PAGE_SIZE`)
 - `src/pages/posts/[...slug].astro` — post pages; calls `entry.render()` and reads `remarkPluginFrontmatter`
@@ -108,57 +77,6 @@ never hardcode paths, or the site breaks under a non-root `base`.
 `MainGridLayout.astro` (navbar, banner, sidebar, TOC) wraps `Layout.astro` (head, meta, global CSS vars,
 all client-side bootstrapping). Pages should use `MainGridLayout`.
 
-### Swup page transitions — the main constraint on client JS
-
-`@swup/astro` swaps the `main` and `#toc` containers without a full page load. Consequently `Layout.astro`
-registers nearly all browser behavior through `window.swup.hooks` (`page:view`, `content:replace`,
-`visit:start`, `animation:out:start`, `link:click`, `visit:end`) with a `document.addEventListener('swup:enable', setup)`
-fallback for the first load. Any new client-side initialization (scrollbars, PhotoSwipe, click-outside
-handlers, banner/navbar height math) must be registered the same way or it will silently stop working after
-the first in-site navigation. Banner height is changed on `link:click` rather than via a body class because
-the class update lands after the transition and looks delayed.
-
-### Theming
-
-Light/dark/auto plus a hue slider. An `is:inline` script in `Layout.astro`'s `<head>` applies the stored
-theme and `--hue` before first paint to avoid a flash; `localStorage` keys are `theme` and `hue`. Runtime
-changes go through `src/utils/setting-utils.ts` (`setTheme`, `setHue`), which also sets `data-theme` for
-Expressive Code. The Expressive Code theme must be a dark theme — the blog only overrides dark backgrounds.
-
-### Markdown pipeline
-
-The remark/rehype chain is configured in `astro.config.mjs` with local plugins in `src/plugins/`:
-
-- `remark-reading-time` and `remark-excerpt` write `minutes`, `words`, and `excerpt` into
-  `data.astro.frontmatter`; consumers read them via `remarkPluginFrontmatter` after `entry.render()`
-  (`PostCard.astro`, `posts/[...slug].astro`). They are not part of the Zod schema.
-- `remark-directive` + `remark-directive-rehype` + `rehype-components` implement custom syntax:
-  `:::note`/`tip`/`important`/`caution`/`warning` map to `AdmonitionComponent`, and `::github{repo="..."}`
-  to `GithubCardComponent`. Both are hastscript builders in `src/plugins/rehype-component-*.mjs`.
-- `remark-github-admonitions-to-directives` converts GitHub-style `> [!NOTE]` blocks into those directives.
-- Expressive Code adds two local plugins, `language-badge.ts` and `custom-copy-button.ts`; the built-in copy
-  button is disabled in favor of the custom one.
-
-### i18n
-
-`src/i18n/i18nKey.ts` is an enum; each `src/i18n/languages/*.ts` must satisfy the full `Translation` type
-(all enum keys). `i18n()` resolves once from `siteConfig.lang` at build time — it is not per-request, so
-translation calls at module scope (e.g. `src/constants/link-presets.ts`) are fine. Adding a language means a
-new file plus an entry in the `map` in `translation.ts`.
-
-### Search
-
-Pagefind indexes `dist` as a post-build step, so search only works after `pnpm build && pnpm preview`.
-`Search.svelte` guards on `import.meta.env.PROD && window.pagefind` and returns hardcoded fake results in
-dev. `pagefind.yml` excludes KaTeX spans, the search panel itself, and `[data-pagefind-ignore]`.
-
-### Styling
-
-Tailwind (`@astrojs/tailwind` with `nesting: true`) plus Stylus (`src/styles/variables.styl`,
-`markdown-extend.styl`) and PostCSS (`postcss-import`, `postcss-nesting`). Global CSS custom properties are
-declared in `Layout.astro` rather than `GlobalStyles.astro` — see the comment there linking the Astro issue
-that forces this.
-
 ### Path aliases
 
 `tsconfig.json` defines `@components/*`, `@assets/*`, `@constants/*`, `@utils/*`, `@i18n/*`, `@layouts/*`,
@@ -168,7 +86,8 @@ and `@/*` (→ `src/*`). The codebase mixes these with relative imports; prefer 
 
 - Biome formats with **tabs** and double quotes. `biome.json` disables `useConst`, `useImportType`,
   `noUnusedVariables`, and `noUnusedImports` for `.astro`/`.svelte`/`.vue`, since Biome does not fully
-  understand those files. `src/**/*.css` is excluded from Biome.
+  understand those files. `src/**/*.css` is excluded from Biome. Markdown is not a Biome language — a `.md`
+  file anywhere under `src/` is ignored by `biome ci` and can be added freely.
 - On a Windows checkout with `core.autocrlf=true`, `biome ci ./src` reports *every* file as unformatted —
   Biome's `lineEnding` defaults to `lf` while the working tree is CRLF. This is a local-only artifact; CI
   runs on Linux and sees LF. Never "fix" it by running `pnpm lint` (`biome check --write ./src`) or
@@ -186,13 +105,6 @@ and `@/*` (→ `src/*`). The codebase mixes these with relative imports; prefer 
   `--reporter=github` job log does not name the file — read the annotations instead:
   `gh api repos/:owner/:repo/actions/runs/<run-id>/jobs --jq '.jobs[0].id'`, then
   `gh api repos/:owner/:repo/check-runs/<job-id>/annotations`.
-- `LightDarkSwitch.svelte` is the only Svelte component in runes mode; the others use legacy `export let` /
-  `$:`. A runes component with no `$props()` is typed `Record<string, never>`, whose index signature makes
-  even `client:only` fail `astro check` — hence the explicit empty `$props()` declaration there.
-- `Layout.astro` unconditionally overwrites its `banner` prop with `siteConfig.banner.src` (a `TODO`:
-  per-post cover banners are disabled). Passing `banner` through `MainGridLayout` currently has no effect —
-  the post cover still reaches the `<head>` as `og:image`, but through the separate `ogImage` prop resolved
-  by `src/utils/og-utils.ts`.
 - `src/config.ts` still holds upstream's demo values (`title: "Fuwari"`, `subtitle: "Demo Site"`,
   `lang: "en"`) even though the site is live. `site` in `astro.config.mjs` and the fallback in
   `src/pages/rss.xml.ts` both point at `blog.cobweb11.top` — keep those two in sync.
