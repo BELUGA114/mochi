@@ -17,6 +17,6 @@ jobs:
         with:
           # Pin to the same version as the @biomejs/biome devDependency,
           # so CI matches local `biome` results.
-          version: "2.5.10"
+          version: "2.5.12"
       - name: Run Biome
         run: biome ci ./src --reporter=github

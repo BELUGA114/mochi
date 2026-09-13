@@ -135,7 +135,7 @@ without logging in or uploading anything.
 
 `.github/workflows/build.yml` — `pnpm astro check` and `pnpm astro build` on a Node 22/23 matrix,
 `pnpm install --frozen-lockfile`, concurrency-cancelling, on push/PR to `main`.
-`.github/workflows/biome.yml` — `biome ci ./src --reporter=github` using `biome@latest` from
-`biomejs/setup-biome`, which can drift from the pinned `@biomejs/biome` 2.5.10 devDependency and fail CI on
-rules that pass locally.
+`.github/workflows/biome.yml` — `biome ci ./src --reporter=github`, with `biomejs/setup-biome` pinned to the
+same version as the `@biomejs/biome` devDependency (2.5.12) so CI matches local results. Bumping one without
+the other silently splits the two.
 Neither workflow deploys — publishing is Cloudflare's Workers Builds, triggered by the same pushes.
