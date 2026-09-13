@@ -72,7 +72,7 @@ H2/H3 均为 0-RTT 多路复用，XMUX 是控制它们的核心接口：
 
 多线程测速前可设 `"maxConcurrency": 1`，只用一条底层连接复用到底可以设 `"maxConnections": 1`，日常可保持全 0。
 
-**用法上的注意：**
+**注意：**
 
 - `maxConcurrency` 与 `maxConnections` 冲突（都大于 0 直接报错），只能二选一
 - `hKeepAlivePeriod` 是唯一不允许填范围的项（该值取随机本身才是特征），且允许负数（-1 关闭空闲保活）
@@ -82,46 +82,85 @@ H2/H3 均为 0-RTT 多路复用，XMUX 是控制它们的核心接口：
 
 ## 请求混淆
 
-padding 默认放在 `Referer: /yourpath?x_padding=XXXX...`，这些在 CDN、反代的访问日志与 WAF 规则里都是显眼的模式，后续版本加入了混淆参数，把元数据挪走并随机化
+padding 默认放在 `Referer: /yourpath?x_padding=XXXX...`，这些在 CDN、反代的访问日志与 WAF 规则里都是显眼的模式，后续版本加入了混淆参数，把元数据挪走并随机化：
 
-| 参数                                 | 作用                                                                     | 默认值                                  |
-| ------------------------------------ | ------------------------------------------------------------------------ | --------------------------------------- |
-| `xPaddingObfsMode`                   | 总开关，开启后 padding 的位置与样式按下列参数走                          | `false`（固定 `Referer` + `x_padding`） |
-| `xPaddingPlacement`                  | padding 放哪：`queryInHeader` / `cookie` / `header` / `query`            | `queryInHeader`                         |
-| `xPaddingMethod`                     | padding 内容：`repeat-x`（重复 `X`）/ `tokenish`（随机 Base62）          | `repeat-x`                              |
-| `xPaddingKey` / `xPaddingHeader`     | query / cookie 的键名 / 承载 query 的头名（例如 `Referer`、`Origin` 等） | `x_padding` / `X-Padding`               |
-| `sessionIDPlacement`                 | 会话 ID 放哪：`path` / `query` / `header` / `cookie`                     | `path`                                  |
-| `sessionIDTable` / `sessionIDLength` | 会话 ID 的字符表（预置 `Base62`、`Alphabet`、`hex` 等）与长度范围        | 空（用 UUID）                           |
-| `seqPlacement`                       | seq 放哪（同上四选一）                                                   | `path`                                  |
-| `uplinkDataPlacement`                | packet-up 上行数据放 `body` / `header` / `cookie`（后两者仅 packet-up）  | `body`                                  |
-| `uplinkHTTPMethod`                   | 上行 HTTP 方法，`GET` 仅 packet-up 可用                                  | `POST`                                  |
-| `serverMaxHeaderBytes`               | 服务端接受的最大请求头字节数（数据放 header 时要相应调大）               | 8192                                    |
+| 参数                   | 作用                                                                    | 默认值                                      |
+| ---------------------- | ----------------------------------------------------------------------- | ------------------------------------------- |
+| `xPaddingBytes`        | padding 长度范围（不可关闭，填 0 或负数会报错）                         | 100-1000 随机                               |
+| `xPaddingObfsMode`     | 总开关，开启后 padding 的位置与样式按下列参数走                         | `false`（固定 `Referer` + `x_padding`）     |
+| `xPaddingPlacement`    | padding 放哪：`queryInHeader` / `cookie` / `header` / `query`           | `queryInHeader`                             |
+| `xPaddingMethod`       | padding 内容：`repeat-x`（重复 `X`）/ `tokenish`（随机 Base62）         | `repeat-x`                                  |
+| `xPaddingKey`          | query / cookie 的键名                                                   | `x_padding`                                 |
+| `xPaddingHeader`       | 承载 query 的头名（例如 `Referer`、`Origin` 等）                        | `X-Padding`                                 |
+| `sessionIDPlacement`   | 会话 ID 放哪：`path` / `query` / `header` / `cookie`                    | `path`                                      |
+| `sessionIDKey`         | 非 path 放置时承载会话 ID 的键名（头名 / 参数名 / cookie 名）           | `X-Session` / `x_session`（由放置位置决定） |
+| `sessionIDTable`       | 会话 ID 的字符表（预置 `Base62`、`Alphabet`、`hex` 等）                 | 空（用 UUID）                               |
+| `sessionIDLength`      | 会话 ID 的长度范围                                                      | 空（用 UUID）                               |
+| `seqPlacement`         | seq 放哪：`path` / `query` / `header` / `cookie`                        | `path`                                      |
+| `seqKey`               | 非 path 放置时承载 seq 的键名（头名 / 参数名 / cookie 名）              | `X-Seq` / `x_seq`（由放置位置决定）         |
+| `uplinkDataPlacement`  | packet-up 上行数据放 `body` / `header` / `cookie`（后两者仅 packet-up） | `body`                                      |
+| `uplinkDataKey`        | 非 body 放置时承载上行数据的键名（头名 / cookie 名）                    | `X-Data` / `x_data`（由放置位置决定）       |
+| `uplinkChunkSize`      | 数据放 header / cookie 时每块编码后的大小                               | header 3-4KB / cookie 2-3KB                 |
+| `uplinkHTTPMethod`     | 上行 HTTP 方法，`GET` 仅 packet-up 可用                                 | `POST`                                      |
+| `serverMaxHeaderBytes` | 服务端接受的最大请求头字节数                                            | 8192                                        |
 
-客户端模板（可整块放进 `extra` 下发；服务端配同样的值）：
+`extra` 字段用于向客户端分享配置，服务端只认自己 `xhttpSettings` 里的同名参数：
+
+- **两端须一致：** `padding` 的 6 项以及 `sessionIDPlacement`、`sessionIDKey`、`seqPlacement`、`seqKey`、`uplinkDataPlacement`、`uplinkDataKey`。服务端会校验参数，两端不一致时请求会被 400 拒绝
+
+- **仅客户端：** `sessionIDTable`、`sessionIDLength`、`uplinkHTTPMethod`、`uplinkChunkSize`、`noGRPCHeader`、`scMinPostsIntervalMs`
+
+- **仅服务端：** `serverMaxHeaderBytes`、`scStreamUpServerSecs`、`scMaxBufferedPosts`、`noSSEHeader`
+
+`scMaxEachPostBytes` 是单向约束，客户端按自己的值分包，服务端只拿自己的 `To` 做上限，不小于客户端即可。
+
+## 客户端 extra 模板
+
+示例为 packet-up 模式，覆盖 `extra` 可用的全部字段，可按需更改或删掉走默认：
 
 ```json title="客户端"
 "xhttpSettings": {
   "path": "/yourpath",
   "extra": {
+    // 追加的自定义请求头
+    "headers": { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" },
+    // 两端一致：padding 与 placement / key
+    "xPaddingBytes": "100-1000",
     "xPaddingObfsMode": true,
     "xPaddingPlacement": "queryInHeader",
     "xPaddingMethod": "tokenish",
     "xPaddingKey": "x",
     "xPaddingHeader": "Origin",
-    "sessionIDPlacement": "path",
+    "sessionIDPlacement": "query",
+    "sessionIDKey": "s",
+    "seqPlacement": "query",
+    "seqKey": "q",
+    "uplinkDataPlacement": "header",
+    "uplinkDataKey": "X-Data",
+    // 仅客户端：会话 ID 形态、上行形态与分包节奏
     "sessionIDTable": "Base62",
-    "sessionIDLength": "12-20"
+    "sessionIDLength": "12-20",
+    "uplinkChunkSize": "2000-3000",
+    "uplinkHTTPMethod": "GET",
+    "noGRPCHeader": false,
+    "scMaxEachPostBytes": "4000-8000",
+    "scMinPostsIntervalMs": "10-50",
+    // 仅客户端：XMUX，填了任意一项后须全部显式填写
+    "xmux": {
+      "maxConcurrency": 0, "maxConnections": 0, "cMaxReuseTimes": 0,
+      "hMaxRequestTimes": 0, "hMaxReusableSecs": 0, "hKeepAlivePeriod": 0
+    }
+    // "downloadSettings": { ... }   // 上下行分离时的完整下行 streamSettings
   }
 }
 ```
 
-注意：
+**注意：**
 
-- `xPaddingBytes` 本身不可关闭（填 0 或负数会报错），默认 100-1000 随机
+- 数据放 header 时要相应调大 `serverMaxHeaderBytes`（如 16384，过 CDN 还要留意中间盒的请求头上限）
 - `tokenish` 生成随机 Base62 串，按 HPACK huffman 编码后长度落在 `xPaddingBytes` 区间内，服务端校验同样按 huffman 长度算，比一串 `X` 更像真实数据
 - `queryInHeader` 仍是把 padding 塞进某个头（可自定义，默认 `Referer`）的 URL query 里，对 CF 兼容性最好；`cookie` / `header` / `query` 则完全离开 URL
-- 会话 ID 不再是 UUID，而是从字符表随机取的串（如 `/yourpath/aB3xK9mPqZ2r`），`sessionIDTable` × `sessionIDLength` 的组合空间须大于 2^31，否则报错
-- 服务端校验 padding 的存在与长度：两端参数不一致时请求会被 400 拒绝，调参要同步改
+- 会话 ID 不再是 UUID，而是从字符表随机取的串（如 `/yourpath/aB3xO6nPqZ2r`），`sessionIDTable` × `sessionIDLength` 的组合空间须大于 2^31，否则报错
 
 ## XHTTP + REALITY 对比 RAW + REALITY + Vision
 
@@ -138,7 +177,7 @@ REALITY 时客户端固定使用 H2，XTLS/Vision 只在 TCP+TLS/REALITY 下可�
 
 纯直连、要单流拉满带宽、服务器 CPU 不富裕、跑 Linux，适合 RAW。
 
-网页浏览（大量小连接，0-RTT 收益直接）、要上下行分离、要过 CDN 或前置反代，适合 XHTTP。
+网页浏览、有大量小连接、要上下行分离、要过 CDN 或前置反代，适合 XHTTP。
 
 ## 玩法与示例配置
 
