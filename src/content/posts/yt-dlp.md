@@ -2,10 +2,10 @@
 title: yt-dlp 入门笔记
 published: 2026-08-13
 description: yt-dlp 的常用参数与用法速查。
-image: ''
+image: ""
 tags: [yt-dlp, 命令行, YouTube, 视频下载]
 category: 工具
-draft: false 
+draft: false
 ---
 
 ## 准备
@@ -14,13 +14,13 @@ draft: false
 
 依赖确认：
 
-```powershell
+```bash
 ffmpeg -version
 ```
 
 更新：
 
-```powershell
+```bash
 yt-dlp -U
 ```
 
@@ -28,7 +28,7 @@ yt-dlp -U
 
 路径 `%AppData%\yt-dlp\config` 或 exe 同目录下的 `config.txt`：
 
-```powershell
+```bash
 -f "bv*[height<=1080]+ba/b[height<=1080]"  # 选不超过1080p的最佳视频+音频，或退而选最佳单文件
 --merge-output-format mp4                  # 合并输出为 MP4 容器
 --embed-metadata --embed-chapters          # 嵌入元数据和章节信息
@@ -56,7 +56,7 @@ yt-dlp -U
 - `/` 是"或"，前面不满足时用后面的
 - 结尾的 `b` 是含音视频的单文件，作兜底
 
-```powershell
+```bash
 yt-dlp -F <URL>                            # 列出格式
 yt-dlp -f "bv*+ba/b" <URL>                 # 默认最佳
 yt-dlp -S "res:1080,vcodec:h264" <URL>     # 限 1080p，优先 H.264
@@ -70,7 +70,7 @@ yt-dlp -S "ext" <URL>                      # 优先 mp4 容器
 
 `-F` 列出来的 ID 可以直接写进 `-f`，多条用 `+` 合并：
 
-```powershell
+```bash
 yt-dlp -f <格式ID> <<URL>>
 yt-dlp -f 137+140 <URL>                 # 视频流 + 音频流
 yt-dlp -f 30032+bestaudio <URL>         # ID 和选择器可以混着写
@@ -82,7 +82,7 @@ yt-dlp -f 30032+bestaudio <URL>         # ID 和选择器可以混着写
 
 ## 音频
 
-```powershell
+```bash
 yt-dlp -x --audio-format mp3 --audio-quality 0 <URL>   # 转 mp3，0 是最高
 yt-dlp -f "ba[ext=m4a]/ba" -x <URL>                    # 直取 m4a，不重编码，最快
 yt-dlp -x --audio-format best <URL>                    # 不转码，只抽流
@@ -94,7 +94,7 @@ YouTube 的音轨最高 256 kbps，转 320K mp3 就是最高。
 
 ## 字幕
 
-```powershell
+```bash
 # 列出该视频可用的字幕及语言代码
 yt-dlp --list-subs <URL>
 
@@ -110,7 +110,7 @@ yt-dlp --skip-download --write-auto-subs --convert-subs srt -o "%(title)s.%(ext)
 
 ## 播放列表与批量
 
-```powershell
+```bash
 yt-dlp --batch-file <URL>s.txt <URL>                    # 文件里每行一个 <URL>
 yt-dlp --download-archive archive.txt <URL>             # 下过的记进文件，重跑自动跳过
 yt-dlp --playlist-items 1-10,15,20- <URL>               # 只下其中几集
@@ -123,7 +123,7 @@ yt-dlp --flat-playlist --print "%(playlist_index)s`t%(title)s" <URL>   # 只看�
 
 ## 搜索与 cookies
 
-```powershell
+```bash
 # YouTube 搜索前 10 个结果，只列出标题和链接
 yt-dlp "ytsearch10:关键词" --flat-playlist --print "%(title)s | %(url)s"
 
@@ -143,7 +143,7 @@ yt-dlp ":ytfav" --cookies-from-browser firefox
 
 cookies 两种给法：
 
-```powershell
+```bash
 yt-dlp --cookies-from-browser edge <URL>
 yt-dlp --cookies cookies.txt <URL>
 ```
@@ -152,7 +152,7 @@ Chrome 开着时可能读不到它的 cookie 库，Edge 和 Firefox 稳一些。
 
 ## 切片、直播、去赞助
 
-```powershell
+```bash
 yt-dlp --download-sections "*10:00-15:00" <URL>   # 需要 ffmpeg
 yt-dlp --download-sections "*from-2:30" <URL>     # 从 2:30 到结尾
 yt-dlp --split-chapters <URL>                     # 按章节切成多个文件
@@ -168,7 +168,7 @@ yt-dlp --sponsorblock-mark all <URL>              # 只标记成章节，不删
 
 ## 代理
 
-```powershell
+```bash
 yt-dlp --proxy http://127.0.0.1:10086 <URL>
 yt-dlp --proxy socks5://127.0.0.1:10086 <URL>
 yt-dlp --proxy "" <URL>                        # 强制直连
@@ -184,7 +184,7 @@ YouTube 报 403 时先试 `--extractor-args "youtube:player_client=web_safari"`�
 
 只要中文标题就写进文件再读：
 
-```powershell
+```bash
 yt-dlp --simulate --print-to-file "%(title)s" title.txt <URL>
 ```
 
