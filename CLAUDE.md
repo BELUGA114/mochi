@@ -63,10 +63,20 @@ nearest declaring ancestor. Defaults (`WALLPAPER_OVERLAY_DEFAULT`, `WALLPAPER_CA
 `src/constants/constants.ts`. Cards also get a frosted-glass treatment in the same style block:
 `body.enable-wallpaper .card-base` / `.float-panel` add `backdrop-filter` blur + saturate, a 1px
 light border, and a soft shadow (the dark card base is tinted `rgba(18,18,26,…)` rather than pure black);
-the homepage mobile list wrapper in `PostPage.astro` is translucent but not `.card-base`, so it misses the
-blur. The TOC gets a lighter glass rail on post pages, gated on `body.enable-wallpaper:has(#post-container)`
+the homepage list wrapper in `PostPage.astro` carries no surface of its own (transparent at every breakpoint,
+card gaps via `gap-4`) so the per-card glass is the only translucent layer — a second translucent layer there
+would stack with the cards' own background and crush the wallpaper to ~5% visibility. The TOC gets a lighter glass rail on post pages, gated on `body.enable-wallpaper:has(#post-container)`
 — the `:has()` guard keeps the empty TOC placeholder on non-post pages from rendering an empty panel, and
 the `mask-image` fade is dropped there because it would cut the panel's border.
+
+Chromium silently disables `backdrop-filter` when any ancestor keeps an animation-filled state: an ancestor
+with an opacity animation plus `animation-fill-mode: forwards` becomes a backdrop root, so descendant cards
+blur only content inside that subtree — the wallpaper is outside it, so the glass looks transparent-but-flat.
+That is why `.onload-animation` in `src/styles/transition.css` uses `backwards` with no base `opacity: 0`
+(`forwards` + `opacity: 0` breaks the glass in Chrome while Firefox keeps working, so the bug is invisible
+in a Firefox-only check). Elements with `.onload-animation` are `#navbar`, `#sidebar`, `#content-wrapper`,
+the footer, and post/list items; `#toc-inner-wrapper` has no such ancestor, which is why the TOC rail was the
+one surface that looked right in Chrome.
 
 ### Content collections
 
