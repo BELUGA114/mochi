@@ -24,6 +24,16 @@ CC0 仅涉及版权及邻接权益。在适用法律不允许前述放弃的司�
 
 [ヤチヨ](https://www.pixiv.net/artworks/141436879) by [NEWDA](https://www.pixiv.net/users/102860368)
 
+[_(　_-  ̫ -`)_💙](https://x.com/amsrntk3/status/1468517434940616704?s=20) by [甘城なつき/Nachoneko](https://x.com/amsrntk3)
+
+[nya~](https://x.com/amsrntk3/status/1898002137445024099) by [甘城なつき/Nachoneko](https://x.com/amsrntk3)
+
+[【歌ってみた】ロンリーユニバース – Aqu3ra / covered by 月見ヤチヨ(cv.早見沙織) from 超かぐや姫！](https://www.youtube.com/watch?v=enzi3ZZmFoE) by [『超かぐや姫 ! 』公式](https://www.youtube.com/@Cho-KaguyaHime-PR)
+
+[Official image](https://www.imdb.com/title/tt38872297/mediaviewer/rm1917377026/) [Official image](https://x.com/Cho_KaguyaHime/status/2013944673618800904)by [『超かぐや姫 ! 』公式](https://x.com/Cho_KaguyaHime)
+
+[Netflix cover photo](https://www.netflix.com/title/81756595) by [『超かぐや姫 ! 』公式](https://x.com/Cho_KaguyaHime)
+
 ## 免责声明
 
 1. 本站全部内容均按其发布时之状态提供，本人不对内容的准确性、完整性、可靠性、适时性或可用性作出任何明示或默示的陈述、保证或承诺，包括但不限于对适销性、特定用途适用性及不侵权的任何默示保证。在适用法律未明文禁止的范围内，本人免除上述全部保证义务。

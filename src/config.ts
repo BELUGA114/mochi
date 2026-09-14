@@ -29,10 +29,15 @@ export const siteConfig: SiteConfig = {
 		enable: true, // Site-wide fixed wallpaper background. Takes precedence over the banner above when enabled
 		images: [
 			"assets/images/wallpapers/1.jpg", // Relative to the /src directory
+			"assets/images/wallpapers/2.jpg",
+			"assets/images/wallpapers/3.jpg",
+			"assets/images/wallpapers/4.jpg",
+			"assets/images/wallpapers/5.jpg",
+			"assets/images/wallpapers/6.jpg",
 			// "/wallpapers/2.jpg", // Relative to the /public directory if it starts with '/'
 			// "https://example.com/3.png", // An http(s):// URL is used as is
 		],
-		// overlay: { light: 0.2, dark: 0.4 }, // Dimming overlay opacity, defaults shown
+		overlay: { light: 0.05, dark: 0.15 }, // Dimming overlay opacity, defaults shown
 		// cardOpacity: { light: 0.75, dark: 0.77 }, // Card background opacity, defaults shown
 	},
 	toc: {
