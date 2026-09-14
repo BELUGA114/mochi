@@ -1,9 +1,9 @@
 import type { CollectionEntry } from "astro:content";
+import { getSortedPosts } from "@utils/content-utils";
+import { formatDateToYYYYMMDD } from "@utils/date-utils";
+import { url } from "@utils/url-utils";
 import type { APIRoute } from "astro";
 import { siteConfig } from "@/config";
-import { formatDateToYYYYMMDD } from "@utils/date-utils";
-import { getSortedPosts } from "@utils/content-utils";
-import { url } from "@utils/url-utils";
 
 type Props = {
 	entry: CollectionEntry<"posts">;

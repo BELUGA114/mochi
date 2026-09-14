@@ -1,7 +1,7 @@
-import type { APIRoute } from "astro";
-import { siteConfig } from "@/config";
 import { getSortedPosts } from "@utils/content-utils";
 import { url } from "@utils/url-utils";
+import type { APIRoute } from "astro";
+import { siteConfig } from "@/config";
 
 // llms.txt 约定(https://llmstxt.org/):给 LLM / AI 抓取器的站点入口,
 // 每篇文章直接链接到对应的 .md 版本
