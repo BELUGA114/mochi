@@ -115,10 +115,22 @@ Non-obvious choices, do not "simplify" them away:
   transform would be wrong (its `.onload-animation` keyframes animate transform; the FLIP animation
   is safe because on Swup navigations the element persists and its keyframes have already finished,
   with `backwards` fill leaving nothing behind).
-- `#toc-inner-wrapper` sits at `top-[5.5rem]` (was `top-14`) so the TOC rail's top edge aligns with
-  the sidebar cards' top (5.5rem = `mainPanelTop` with the banner off). Alignment is an
-  initial-view property — the TOC is fixed while the sidebar is sticky, so they diverge when
-  scrolled.
+- The TOC rail mirrors `#sidebar-sticky`'s behavior: `#toc-inner-wrapper` is `sticky top-4`, so it starts
+  aligned with the sidebar cards' top (its static position = the main-content wrapper's top, 5.5rem =
+  `mainPanelTop` with the banner off), rises with the page, and pins at the same 1rem offset the
+  categories block pins at. For the sticky travel to span the article, the whole TOC subtree
+  (`#toc-panel` and everything inside) lives **inside the main-content wrapper** (`absolute w-full z-30
+  pointer-events-none` in `MainGridLayout.astro`), as an `absolute inset-0` layer *before* `#main-panel`:
+  the wrapper's only in-flow child is `#main-panel`, so its height equals the article height — the same
+  grid-row height `#sidebar` spans, and both sticky elements unstick at the same scroll point. This is
+  why the TOC cannot stay at body level: an `absolute bottom-0` there anchors to the initial containing
+  block (viewport-height, not document-height), and everything between body and the wrapper is a 0-height
+  box, so no pure-CSS container of article height exists outside the wrapper. The full-size `inset-0`
+  layer is `pointer-events-none` with `pointer-events-auto` only on the rail itself; being placed before
+  `#main-panel` keeps the article and BackToTop painting above it, matching the old `z-0` body-level
+  sibling. `#toc-panel` keeps `h-full` (the height chain: wrapper → `inset-0` layer → `h-full` panel →
+  `top-0 bottom-0` on `#toc-wrapper`) and its `transition-all` now also animates that height across
+  navigations — harmless, the panel is an invisible positioning box.
 
 ## Post-page FLIP animation (Chrome jank fix)
 

@@ -74,7 +74,29 @@ const mainPanelTop = bannerEnabled
 
 <!-- Main content -->
 <div class="absolute w-full z-30 pointer-events-none" style={`top: ${mainPanelTop}`}>
-    <!-- The pointer-events-none here prevent blocking the click event of the TOC -->
+    <!-- TOC 导轨：挂在主面板包裹层内、inset-0 铺满以继承包裹层高度（其唯一在流子元素是 #main-panel，
+         故高度 = 正文高度），sticky 的吸附行程因此与左侧 #sidebar-sticky 的容器（同一网格行）同起同止。
+         必须放在 #main-panel 之前，让正文与 BackToTop 绘制于其上；全尺寸层 pointer-events-none，仅导轨恢复事件 -->
+    <div class="absolute inset-0 pointer-events-none hidden 2xl:block">
+        <div id="toc-panel" class="relative h-full max-w-[var(--page-width)] mx-auto transition-all duration-700">
+            <div id="toc-wrapper" class:list={["hidden lg:block transition absolute top-0 bottom-0 -right-[var(--toc-width)] w-[var(--toc-width)] items-center",
+                {"toc-hide": bannerEnabled}]}
+            >
+                <!-- sticky top-4：吸附位与左侧 #sidebar-sticky（sticky top-4）平齐；
+                     初始静位 = 包裹层顶部（无 banner 时 5.5rem），与左侧栏卡片最高点对齐，随页面上移越过 top-4 后吸附 -->
+                <div id="toc-inner-wrapper" class="sticky top-4 pointer-events-auto w-[var(--toc-width)] max-h-[calc(100vh_-_20rem)] overflow-y-scroll overflow-x-hidden hide-scrollbar">
+                    <div id="toc" class="w-full h-full transition-swup-fade ">
+                        <div class="h-8 w-full"></div>
+                        <TOC headings={headings}></TOC>
+                        <div class="h-8 w-full"></div>
+                    </div>
+                </div>
+            </div>
+
+            {/* #toc needs to exist for Swup to work normally */}
+            {!siteConfig.toc.enable && <div id="toc"></div>}
+        </div>
+    </div>
     <!-- 无过渡类：页宽收窄必须瞬切，动画由 Layout.astro 的 FLIP 脚本以 transform 承担（见 transition.css） -->
     <div id="main-panel" class="relative max-w-[var(--page-width)] mx-auto pointer-events-auto">
         <div id="main-grid" class="transition duration-700 w-full left-0 right-0 grid grid-cols-[17.5rem_auto] grid-rows-[auto_1fr_auto] lg:grid-rows-[auto]
@@ -113,28 +135,6 @@ const mainPanelTop = bannerEnabled
         </div>
 
         <BackToTop></BackToTop>
-    </div>
-</div>
-
-<!-- The things that should be under the banner, only the TOC for now -->
-<div class="absolute w-full z-0 hidden 2xl:block">
-    <div id="toc-panel" class="relative max-w-[var(--page-width)] mx-auto transition-all duration-700">
-        <!-- TOC component -->
-        {siteConfig.toc.enable && <div id="toc-wrapper" class:list={["hidden lg:block transition absolute top-0 -right-[var(--toc-width)] w-[var(--toc-width)] items-center",
-            {"toc-hide": bannerEnabled}]}
-        >
-            {/* 5.5rem = 无 banner 时主面板的 top，使 TOC 顶部与左侧侧栏卡片最高点对齐，同时避开导航栏 */}
-            <div id="toc-inner-wrapper" class="fixed top-[5.5rem] w-[var(--toc-width)] max-h-[calc(100vh_-_20rem)] overflow-y-scroll overflow-x-hidden hide-scrollbar">
-                <div id="toc" class="w-full h-full transition-swup-fade ">
-                    <div class="h-8 w-full"></div>
-                    <TOC headings={headings}></TOC>
-                    <div class="h-8 w-full"></div>
-                </div>
-            </div>
-        </div>}
-
-        <!-- #toc needs to exist for Swup to work normally -->
-        {!siteConfig.toc.enable && <div id="toc"></div>}
     </div>
 </div>
 </Layout>
