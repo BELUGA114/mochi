@@ -31,3 +31,10 @@ why the TOC rail was the one surface that looked right in Chrome.
 
 Do not give `.onload-animation` (or any new ancestor of a card) a base `opacity: 0` or a
 `fill-mode: forwards` opacity animation. Verify glass changes in Chrome, not just Firefox.
+
+Fill mode is not the only trigger. A **transient** transform on an ancestor — an animation or
+transition of `transform`, not just a filled one — also disables descendant `backdrop-filter` in
+Chromium for exactly as long as it exists, which is visible as flat glass during post-page FLIP
+navigations (the moving `#swup-container` and `#sidebar` carry running transform animations; see the
+FLIP section in `src/layouts/CLAUDE.md`). Unlike the forwards-fill variant this self-heals the moment
+the transform ends, so the glass returns once the 700ms flip completes.

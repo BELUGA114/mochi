@@ -76,7 +76,8 @@ On post pages (`#post-container` present), three things change at once, all pure
 `src/styles/transition.css` gated on `body:has(#post-container)` (a live selector that re-evaluates
 when Swup swaps `main` — no JS hook involved): the page width narrows from `--page-width` (75rem) to
 56rem on the three width wrappers (`#top-row`, `#main-panel`, `#toc-panel` in
-`MainGridLayout.astro`; the latter two carry `transition-all duration-700`); at `min-width: 64rem`
+`MainGridLayout.astro`; only `#toc-panel` carries `transition-all duration-700` — `#top-row` and
+`#main-panel` deliberately do not, see the FLIP section below); at `min-width: 64rem`
 (lg) `#main-grid` collapses its first track (`grid-template-columns: 0rem auto`, `column-gap: 0`);
 and at `min-width: 96rem` (2xl, the same breakpoint the TOC uses) the sidebar slides out of the page
 width via `margin-left: -18.5rem`. The variable is not overridden — `--page-width` ships as an inline `style` attribute on
@@ -99,30 +100,88 @@ Non-obvious choices, do not "simplify" them away:
   the article in track 2 anyway; the pin keeps both bands behaving identically and makes the
   article's left edge follow the animating track boundary, which is the "content slides into place"
   half of the animation.
-- The sidebar's slide uses a negative `margin-left`, never `position: absolute`: staying in flow
+- The sidebar's *parking* uses a negative `margin-left`, never `position: absolute`: staying in flow
   means no position flip when leaving post mode (an absolute→static flip while the track animates
   0→17.5rem makes a `w-full` sidebar collapse to zero then puff back — that user-reported bug is
   why this is margin-based), preserves the row-height contribution on short post pages, and
   keeps `#sidebar-sticky` sticky working. `width: 17.5rem` is pinned unconditionally at lg+ for the
-  same reason.
-- The slide must not use `transform`/`translate`: `#sidebar` carries `.onload-animation` whose
-  keyframes animate `transform`. A margin transition also creates no backdrop root — verified in
-  Chrome: the wallpaper glass keeps working; it only pays a per-frame re-filter cost while the
-  layout animation runs.
-- `#main-grid` gets an unconditional extended `transition-property` (Tailwind's `transition`
-  utility list plus `grid-template-columns` / `column-gap`): unconditional so the reverse
-  navigation animates, full list so the banner transform transition is kept.
+  same reason. The *slide animation itself* is not the margin — it is a transient transform
+  animation played by the FLIP script (next section). A stylesheet transition on `#sidebar`'s
+  transform would be wrong (its `.onload-animation` keyframes animate transform; the FLIP animation
+  is safe because on Swup navigations the element persists and its keyframes have already finished,
+  with `backwards` fill leaving nothing behind).
 - `#toc-inner-wrapper` sits at `top-[5.5rem]` (was `top-14`) so the TOC rail's top edge aligns with
   the sidebar cards' top (5.5rem = `mainPanelTop` with the banner off). Alignment is an
   initial-view property — the TOC is fixed while the sidebar is sticky, so they diverge when
   scrolled.
 
-Known limitations: with the banner enabled, `.enable-banner #top-row` shortens the navbar row's
-transition to 300ms; the post-mode rule pins `transition-duration` to 700ms so the width animation
-stays in lockstep when entering a post (the reverse direction still desyncs, 300 vs 700ms — dormant
-config, revisit if the banner returns). And in the 64–96rem band, leaving a post page re-displays
-the sidebar instantly (`display` cannot transition) while the first track is still near zero, so the
-article slides right off the freshly reappearing sidebar — a known transient in that band only.
+## Post-page FLIP animation (Chrome jank fix)
+
+Entering a post page used to jank in Chrome, worse the longer the post: the layout-property
+transitions (`grid-template-columns` / `max-width` / `margin-left`) run the full Style→Layout→Paint
+pipeline every frame for 700ms, and the changing article width re-wrapped the whole text each frame
+(plus glass `backdrop-filter` re-filtering on paint). Firefox is smooth on the same markup, so it
+only showed in Chrome. Locking the article to its final 54rem width (rendering it once and letting
+containers animate around it) removed the per-frame reflow but **not** the jank — the per-frame
+layout/paint of the moving subtree alone was enough. The fix is FLIP (render final state, invert
+with transform, play):
+
+- All post-mode layout changes snap instantly: `transition.css` declares no transitions for the
+  `#main-grid` tracks, `#main-panel` max-width, `#top-row` max-width, or the sidebar's negative
+  margin (Tailwind's `transition` utility property list doesn't include those properties anyway;
+  the extended `transition-property` rule, the `#sidebar` margin transition, and the post-mode
+  700ms `#top-row` duration pin from the original commit were deleted, and the
+  `transition-all duration-700` classes were dropped from `#main-panel` and `#top-row` in
+  `MainGridLayout.astro`).
+- The FLIP script lives in `Layout.astro`'s first module script, registered through the standard
+  swup hooks: `visit:start` measures `#swup-container`/`#sidebar` rects (the fade-out's
+  `translate-y-4` is vertical only, `left` is unaffected); `content:replace` without `before: true`
+  runs after the DOM swap, where reading a rect also forces the `:has()` recalc and the final
+  layout; then it plays `el.animate([{transform: translateX(delta)}, {transform: translateX(0)}],
+  {duration: 700, easing})` — the Web Animations API with its default `fill: none`. So `visit:end`
+  returns to ~200ms instead of ~700ms (no queued-navigation latency, no extended
+  `#page-height-extend` window), the 0% keyframe applies before first paint (no second forced reflow
+  to commit the start state), and no cleanup timer is needed. Transform animations are
+  compositor-only: no layout, no text repaint.
+- `#top-row` snaps too, by experiment: after the FLIP landed, 5000-char posts still showed
+  occasional Chrome jank, and a differential test (temporarily disabling `#top-row`'s transition at
+  all widths) eliminated it — the sticky navbar's per-frame max-width relayout was the only
+  remaining per-frame layout animation. It cannot be FLIPped with a transform instead: a transform
+  on `#top-row` would re-root `position: fixed` descendants, and `#nav-menu-panel`'s positioning
+  only works by a Tailwind class-order coincidence as it is. Only `#toc-panel` keeps its width
+  transition: a branch (not ancestor) of the article, visible only at ≥96rem, small subtree, and
+  confirmed not to jank.
+- Gated to ≥75rem (`FLIP_MIN_WIDTH_QUERY` in Layout.astro; the gate is JS-only — `transition.css`
+  has no matching media query any more): the right-edge constraint is the 54rem article card plus
+  19.5rem of fixed left-hand width (1rem padding-left + 17.5rem first track + 1rem gap) = 73.5rem
+  of layout width. 74.5rem left only ~1px of margin — its extra 1rem just happened to absorb a
+  scrollbar — so 75rem was chosen for a real margin. Nothing sets `overflow-x` on `html`/`body`,
+  and that must stay so: this threshold is the only guard against a horizontal scrollbar. Below the
+  gate everything snaps with no animation.
+- The Swup fade runs untouched from the stylesheet — nothing inline overrides it any more. Its
+  `translate-y-4` rise, however, stays suppressed while the transform animation runs (WAAPI controls
+  the `transform` property for those 700ms), so post navigations fade in as opacity-only. Accepted;
+  the sidebar carries no fade classes.
+- Running animations are cancelled at `visit:start`: a live WAAPI transform affects
+  `getBoundingClientRect`, so a mid-flight FLIP would pollute the next measurement. With `fill: none`
+  there is nothing else to clean — the animation leaves no residue when it ends, which is exactly why
+  the old lingering-transform hazard is gone along with its timer (no containing block for
+  `position: fixed` descendants, no Chromium compositing effect node breaking `backdrop-filter`; see
+  the glass trap in `src/styles/CLAUDE.md`).
+
+Leaving a post at ≥75rem FLIPs in reverse (the delta flips sign). In the 75–96rem band entering
+a post, the sidebar is `display: none` in post mode, so it vanishes instantly while the article
+slides (unchanged from the pre-FLIP behavior); leaving a post re-displays it instantly (`display`
+cannot animate) — the known transient, now only in that band. Below 64rem nothing moves at all
+(single-column; that is the mobile fix). The navbar width change is now a snap in both directions;
+if the banner is ever re-enabled, `#top-row` has no transition to desync any more, but the banner's
+own `#main-grid`/`#banner-wrapper` transitions still animate — revisit then.
+
+Glass limitation: while a transform animation runs it creates a backdrop root in Chromium, so the
+article card **and the sidebar cards** render with flat glass for the 700ms flip (see
+`src/styles/CLAUDE.md`, which now documents this traversal of the `.onload-animation` trap). The
+sidebar half is a regression versus the old margin transition — margin transitions don't create
+backdrop roots, transform animations do — and it self-heals when the animation ends.
 
 ## Known trap: the `banner` prop does nothing
 

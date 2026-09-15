@@ -454,6 +454,51 @@ function init() {
 /* Load settings when entering the site */
 init();
 
+/* ---- FLIP：文章页"补位"动画（Chrome 卡顿修复）----
+   进出文章页时，:has() 驱动的布局（页宽/列宽/侧栏负 margin）瞬切到终态（transition.css 已移除
+   相应过渡），这里用 el.animate 把正文和侧栏从换页前的位置滑回终态：transform 动画走合成器，
+   不触发 layout/paint，长文不再逐帧重排；fill 默认 none，动画结束自动回落基础样式，无残留。
+   阈值 75rem（正文 54rem + 左侧 19.5rem = 73.5rem，留出余量）与 transition.css 的媒体查询保持一致 */
+const FLIP_DURATION_MS = 700
+const FLIP_EASING = 'cubic-bezier(0.4, 0, 0.2, 1)'
+const FLIP_MIN_WIDTH_QUERY = '(min-width: 75rem)'
+let flipOldArticleLeft: number | null = null
+let flipOldSidebarLeft: number | null = null
+let flipAnimations: Animation[] = []
+
+function flipElement(el: HTMLElement, oldLeft: number, currentRect: DOMRect) {
+	// startFlip 读取的 rect 既是终态几何、也已完成强制回流，delta 因此基于终态布局
+	const delta = oldLeft - currentRect.left
+	if (Math.abs(delta) < 1) return
+	// el.animate 默认 fill: none：0% 帧在首次绘制前生效（无需二次强制回流提交起始态），
+	// 结束后自动回落基础样式、不留内联 transform，所以不存在"非 none transform 当包含块 /
+	// 破坏毛玻璃"的残留风险，也就不需要清理定时器。代价是进行中的动画同样计入
+	// getBoundingClientRect，会污染下一次测量，故 visit:start 必须先 cancel（见下）
+	const animation = el.animate(
+		[{ transform: `translateX(${delta}px)` }, { transform: 'translateX(0)' }],
+		{ duration: FLIP_DURATION_MS, easing: FLIP_EASING },
+	)
+	flipAnimations.push(animation)
+}
+
+function startFlip() {
+	if (!window.matchMedia(FLIP_MIN_WIDTH_QUERY).matches) return
+	const article = document.getElementById('swup-container')
+	const sidebar = document.getElementById('sidebar')
+	// 每端只读一次 rect（首读同时强制回流，落定 :has() 翻转后的终态布局）并传入 flip 路径
+	const articleRect = article?.getBoundingClientRect()
+	if (article && articleRect && flipOldArticleLeft !== null) {
+		flipElement(article, flipOldArticleLeft, articleRect)
+	}
+	const sidebarRect = sidebar?.getBoundingClientRect()
+	// 侧栏两端都可见才逆推：文章页 <96rem 时侧栏 display:none，rect 宽度为 0
+	if (sidebar && sidebarRect && flipOldSidebarLeft !== null && sidebarRect.width > 0) {
+		flipElement(sidebar, flipOldSidebarLeft, sidebarRect)
+	}
+	flipOldArticleLeft = null
+	flipOldSidebarLeft = null
+}
+
 const setup = () => {
 	// TODO: temp solution to change the height of the banner
 /*
@@ -485,6 +530,19 @@ const setup = () => {
 		}
 	})
 	window.swup.hooks.on('content:replace', initCustomScrollbar)
+	window.swup.hooks.on('visit:start', () => {
+		// 上一次 FLIP 未跑完就再次导航：先取消进行中的动画再测量，否则 rect 里带着未跑完的位移
+		flipAnimations.forEach(a => a.cancel())
+		flipAnimations = []
+		const article = document.getElementById('swup-container')
+		const sidebar = document.getElementById('sidebar')
+		// fade-out 的 translate-y-4 只影响纵向，rect.left 不受影响
+		flipOldArticleLeft = article ? article.getBoundingClientRect().left : null
+		const sidebarRect = sidebar?.getBoundingClientRect()
+		flipOldSidebarLeft = sidebarRect && sidebarRect.width > 0 ? sidebarRect.left : null
+	})
+	// 不带 before:true，在 DOM 替换完成后触发：此刻新内容与 :has() 终态均已就位
+	window.swup.hooks.on('content:replace', startFlip)
 	window.swup.hooks.on('visit:start', (visit: {to: {url: string}}) => {
 		// change banner height immediately when a link is clicked
 		const bodyElement = document.querySelector('body')

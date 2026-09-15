@@ -81,18 +81,13 @@ body:has(#post-container) #sidebar {
         width: 17.5rem;
     }
 }
-/* 文章页页宽收窄：顶栏与正文列从 75rem 同步动画到 56rem（文章卡片 54rem ≈ 首页卡片列宽）。
+/* 文章页页宽收窄：顶栏与正文列从 75rem 同步到 56rem（文章卡片 54rem ≈ 首页卡片列宽）。
    --page-width 以 inline style 挂在 html/body 上、规则压不过 inline，故直接覆盖三个宽度容器的 max-width；
-   #top-row 已有 transition-all duration-700，另两个容器的过渡在 MainGridLayout 标记里补 */
+   三个容器中只有 #toc-panel 带过渡（transition-all duration-700），#top-row / #main-panel 均瞬切，原因见 FLIP 注释 */
 body:has(#post-container) #top-row,
 body:has(#post-container) #main-panel,
 body:has(#post-container) #toc-panel {
     max-width: 56rem;
-}
-/* banner 模式下 .enable-banner #top-row 会把过渡压到 300ms，进入文章页时顶栏宽度动画会与网格/页宽
-   （700ms）脱节；文章态钉回 700ms 保持三组动画同步（wallpaper 模式下本就是 700ms，无影响） */
-body:has(#post-container) #top-row {
-    transition-duration: 700ms;
 }
 /* 断点取 2xl(96rem) 与 TOC 同断点：外挂需要 (视口-56rem)/2 ≥ 17.5rem 侧栏宽 + 留白，即视口 ≥ 93rem，96rem 满足。
    负 margin 把侧栏拉出页宽外、右缘紧贴容器左缘（与 TOC 的 -right-[--toc-width] 对称）；侧栏保持文档流，
@@ -104,17 +99,18 @@ body:has(#post-container) #top-row {
         margin-left: -18.5rem;
     }
 }
-/* 平移用 margin 而非 transform/translate：#sidebar 的 onload-animation keyframes 动 transform，独立属性互不覆盖；
-   margin 过渡也不构成 backdrop root，wallpaper 毛玻璃安全（Chrome 实测玻璃保持生效，仅逐帧重滤有性能成本）。
-   时长与缓动与 #main-grid 一致（700ms / cubic-bezier(0.4,0,0.2,1)），
-   侧栏平移、列宽、页宽三组动画同步 */
-#sidebar {
-    transition: margin-left 0.7s cubic-bezier(0.4, 0, 0.2, 1);
-}
-/* Tailwind 的 transition 工具类属性表不含 grid-template-columns / column-gap，列宽变化会瞬跳，需补上。
-   必须无条件声明：挂在 :has() 规则里的话，离开文章页时选择器失效、反向动画就丢了；
-   且必须保留原属性表完整列表（含 banner 用到的 transform），不能只写两个网格属性 */
-#main-grid {
-    transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter, grid-template-columns, column-gap;
-}
+/* ---- FLIP 模式：布局瞬切，动画由 transform 承担（Chrome 卡顿修复）----
+   根因：布局属性过渡（grid-template-columns / max-width / margin-left）每帧跑完整 Style→Layout→Paint，
+   正文宽度逐帧变化导致全文逐帧重排，Chrome 下卡顿且与文章字数正相关（Firefox 同代码流畅）；
+   仅锁定正文宽度（不重排）不足以消除卡顿——移动中的 subtree 每帧布局/重绘本身就是开销。
+   故页宽、列宽、侧栏负 margin 全部瞬切，视觉动画由 Layout.astro 的 FLIP 脚本以 el.animate 实现
+   （合成器线程，零重排，仅 ≥75rem 启用，阈值推导见 Layout.astro）。
+   #top-row 同样瞬切：差分实验（临时禁其过渡后 5000 字长文不再卡）证实它是 FLIP 后残余卡顿的唯一
+   来源——sticky 顶栏的逐帧 max-width 布局。它不能改成 transform FLIP：#top-row 带 transform 会给
+   position:fixed 后代当包含块，且 #nav-menu-panel 的定位方式本身是脆弱细节。
+   保留的过渡：#toc-panel 的 max-width——正文的旁支而非祖先，只在 ≥96rem 可见，subtree 小，
+   实验证明不构成卡顿源，与 FLIP 同时长同缓动保持观感同步。
+   #main-grid 上残留的 transition duration-700 类同样不是死代码：该工具类的属性表含 transform，
+   而 Layout.astro 通过 body 的 lg:is-home 切换 banner 的 translate-y，这条过渡正是给它的；
+   网格自身的列宽属性虽已瞬切，这个类仍须保留 */
 
