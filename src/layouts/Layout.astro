@@ -466,6 +466,60 @@ let flipOldArticleLeft: number | null = null
 let flipOldSidebarLeft: number | null = null
 let flipAnimations: Animation[] = []
 
+/* ---- O2：顶栏"伪收窄"FLIP ----
+   O1（真实 max-width 过渡 + 窗口内摘玻璃）实测仍有顿挫——真宽度动画的 sticky/布局逐帧
+   重算躲不开。O2 让布局照常瞬切，宽度变化全部用合成器 transform 伪装：玻璃层
+   （恒定局部几何，backdrop 采样区不随布局失效）scaleX 回放旧宽度；三个内容组各自
+   translateX 回旧位再滑回（中间组 justify-between 居中、视口恒定，delta≈0 自动跳过）。
+   全部走 el.animate、fill none、结束后无残留，push 进 flipAnimations 由 visit:start 统一取消 */
+const NAVBAR_FLIP_GROUP_IDS = ['navbar-logo', 'navbar-links', 'navbar-actions']
+let flipOldNavbarWidth: number | null = null
+let flipOldNavbarGroupLefts: (number | null)[] = []
+
+function flipNavbarGroup(el: HTMLElement, oldLeft: number, newLeft: number) {
+	const delta = oldLeft - newLeft
+	if (Math.abs(delta) < 1) return
+	flipAnimations.push(el.animate(
+		[{ transform: `translateX(${delta}px)` }, { transform: 'translateX(0)' }],
+		{ duration: FLIP_DURATION_MS, easing: FLIP_EASING },
+	))
+}
+
+function startNavbarFlip() {
+	if (!window.matchMedia(FLIP_MIN_WIDTH_QUERY).matches) {
+		flipOldNavbarWidth = null
+		return
+	}
+	const panel = document.getElementById('navbar-panel')
+	if (!panel || flipOldNavbarWidth === null) {
+		flipOldNavbarWidth = null
+		return
+	}
+	// startFlip 已强制过回流，此处读取直接命中已落定的布局
+	const newWidth = panel.getBoundingClientRect().width
+	if (Math.abs(flipOldNavbarWidth - newWidth) < 1) {
+		flipOldNavbarWidth = null
+		return
+	}
+	const glass = document.getElementById('navbar-glass')
+	if (glass) {
+		// scaleX 关于面板中心（transform-origin 默认 50%）回放旧宽度：面板 mx-auto 双态同心，
+		// 旧玻璃盒 = 新盒水平放大 oldW/newW。圆角/边框会被横向拉伸（最长约 1.35×），700ms 瞬态可接受
+		flipAnimations.push(glass.animate(
+			[{ transform: `scaleX(${flipOldNavbarWidth / newWidth})` }, { transform: 'scaleX(1)' }],
+			{ duration: FLIP_DURATION_MS, easing: FLIP_EASING },
+		))
+	}
+	NAVBAR_FLIP_GROUP_IDS.forEach((id, i) => {
+		const el = document.getElementById(id)
+		const oldLeft = flipOldNavbarGroupLefts[i]
+		if (el && oldLeft !== null) {
+			flipNavbarGroup(el, oldLeft, el.getBoundingClientRect().left)
+		}
+	})
+	flipOldNavbarWidth = null
+}
+
 function flipElement(el: HTMLElement, oldLeft: number, currentRect: DOMRect) {
 	// startFlip 读取的 rect 既是终态几何、也已完成强制回流，delta 因此基于终态布局
 	const delta = oldLeft - currentRect.left
@@ -540,9 +594,15 @@ const setup = () => {
 		flipOldArticleLeft = article ? article.getBoundingClientRect().left : null
 		const sidebarRect = sidebar?.getBoundingClientRect()
 		flipOldSidebarLeft = sidebarRect && sidebarRect.width > 0 ? sidebarRect.left : null
+		// 顶栏面板宽度与内容组位置：#top-row 在 main 之外、跨导航持久，同一元素前后可比
+		flipOldNavbarWidth = document.getElementById('navbar-panel')?.getBoundingClientRect().width ?? null
+		flipOldNavbarGroupLefts = NAVBAR_FLIP_GROUP_IDS.map(
+			id => document.getElementById(id)?.getBoundingClientRect().left ?? null,
+		)
 	})
 	// 不带 before:true，在 DOM 替换完成后触发：此刻新内容与 :has() 终态均已就位
 	window.swup.hooks.on('content:replace', startFlip)
+	window.swup.hooks.on('content:replace', startNavbarFlip)
 	window.swup.hooks.on('visit:start', (visit: {to: {url: string}}) => {
 		// change banner height immediately when a link is clicked
 		const bodyElement = document.querySelector('body')

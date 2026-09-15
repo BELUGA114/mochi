@@ -22,16 +22,20 @@ let links: NavBarLink[] = navBarConfig.links.map(
 ---
 <div id="navbar" class="z-50 onload-animation">
     <div class="absolute h-8 left-0 right-0 -top-8 bg-[var(--card-bg)] transition"></div> <!-- used for onload animation -->
-    <div class:list={[
+    <!-- O2：面板只管布局、不再带 card-base；玻璃独立成层（绝对定位铺满、-z-10 垫底）。
+         变宽度的盒子不再是 backdrop-filter 载体，其采样区在面板局部坐标系里恒定——
+         宽度动画改由 Layout.astro 对 #navbar-glass 做 scaleX、对三个内容组做 translateX -->
+    <div id="navbar-panel" class:list={[
         className,
-        "card-base !overflow-visible max-w-[var(--page-width)] h-[4.5rem] !rounded-t-none mx-auto flex items-center justify-between px-4"]}>
-        <a href={url('/')} class="btn-plain scale-animation rounded-lg h-[3.25rem] px-5 font-bold active:scale-95">
+        "relative !overflow-visible max-w-[var(--page-width)] h-[4.5rem] mx-auto flex items-center justify-between px-4"]}>
+        <div id="navbar-glass" class="card-base absolute inset-0 -z-10 !rounded-t-none"></div>
+        <a id="navbar-logo" href={url('/')} class="btn-plain scale-animation rounded-lg h-[3.25rem] px-5 font-bold active:scale-95">
             <div class="flex flex-row text-[var(--primary)] items-center text-md">
                 <Icon name="material-symbols:home-outline-rounded" class="text-[1.75rem] mb-1 mr-2" />
                 {siteConfig.title}
             </div>
         </a>
-        <div class="hidden md:flex">
+        <div id="navbar-links" class="hidden md:flex">
             {links.map((l) => {
                 return <a aria-label={l.name} href={l.external ? l.url : url(l.url)} target={l.external ? "_blank" : null}
                           class="btn-plain scale-animation rounded-lg h-11 font-bold px-5 active:scale-95"
@@ -43,7 +47,7 @@ let links: NavBarLink[] = navBarConfig.links.map(
                 </a>;
             })}
         </div>
-        <div class="flex">
+        <div id="navbar-actions" class="flex">
             <!--<SearchPanel client:load>-->
             <Search client:only="svelte"></Search>
             {!siteConfig.themeColor.fixed && (

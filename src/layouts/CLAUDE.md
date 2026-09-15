@@ -77,7 +77,8 @@ On post pages (`#post-container` present), three things change at once, all pure
 when Swup swaps `main` — no JS hook involved): the page width narrows from `--page-width` (75rem) to
 56rem on the three width wrappers (`#top-row`, `#main-panel`, `#toc-panel` in
 `MainGridLayout.astro`; only `#toc-panel` carries `transition-all duration-700` — `#top-row` and
-`#main-panel` deliberately do not, see the FLIP section below); at `min-width: 64rem`
+`#main-panel` snap, the navbar's narrowing being faked by the FLIP script (see below); at
+`min-width: 64rem`
 (lg) `#main-grid` collapses its first track (`grid-template-columns: 0rem auto`, `column-gap: 0`);
 and at `min-width: 96rem` (2xl, the same breakpoint the TOC uses) the sidebar slides out of the page
 width via `margin-left: -18.5rem`. The variable is not overridden — `--page-width` ships as an inline `style` attribute on
@@ -143,14 +144,28 @@ with transform, play):
   `#page-height-extend` window), the 0% keyframe applies before first paint (no second forced reflow
   to commit the start state), and no cleanup timer is needed. Transform animations are
   compositor-only: no layout, no text repaint.
-- `#top-row` snaps too, by experiment: after the FLIP landed, 5000-char posts still showed
-  occasional Chrome jank, and a differential test (temporarily disabling `#top-row`'s transition at
-  all widths) eliminated it — the sticky navbar's per-frame max-width relayout was the only
-  remaining per-frame layout animation. It cannot be FLIPped with a transform instead: a transform
-  on `#top-row` would re-root `position: fixed` descendants, and `#nav-menu-panel`'s positioning
-  only works by a Tailwind class-order coincidence as it is. Only `#toc-panel` keeps its width
-  transition: a branch (not ancestor) of the article, visible only at ≥96rem, small subtree, and
-  confirmed not to jank.
+- The navbar does an O2 "fake narrowing": the layout snaps with everything else, and
+  `startNavbarFlip` in `Layout.astro` fakes the width change entirely on the compositor — the
+  glass layer `#navbar-glass` plays `scaleX(oldW/newW) → 1` about the panel centre (the panel is
+  `mx-auto` in both modes, so both boxes are concentric), and the three content groups
+  (`#navbar-logo` / `#navbar-links` / `#navbar-actions`, ids added in `Navbar.astro`) each play a
+  measured `translateX(oldLeft − newLeft) → 0` (the middle group is `justify-between`-centred and
+  viewport-stationary, so its delta is ~0 and self-skips). History: the original 700ms
+  `#max-width` transition was the only jank source left after the FLIP (differential experiment);
+  O1 — a 300ms real transition with the panel's `backdrop-filter` suppressed for the window —
+  still stuttered, so the per-frame cost is not just the blur re-filter but the sticky/layout
+  recalculation of a real width animation. O2 removes every per-frame main-thread cost by moving
+  the glass off the resizing box: `#navbar-panel` is layout-only now (`relative`, no `card-base`),
+  and `#navbar-glass` (`card-base absolute inset-0 -z-10 !rounded-t-none`) has constant local
+  geometry, so its backdrop sampling region never invalidates on layout. The popovers
+  (`#nav-menu-panel`, `#display-setting`, `#search-panel`) anchor to the panel exactly as before —
+  it was already their containing block via the old `backdrop-filter`, now via `relative`.
+  Transient costs, accepted: the glass's rounded corners/border stretch horizontally up to
+  ~1.35×, and `#navbar-logo`'s hover `scale-animation` is suppressed while its WAAPI transform
+  runs. Below 75rem the navbar snaps with no animation. Only `#toc-panel` keeps its plain 700ms
+  width transition: a branch (not ancestor) of the article, visible only at ≥96rem, and its glass
+  rail (`#toc-inner-wrapper`) has constant size and merely translates — the sampling region never
+  invalidates, confirmed not to jank.
 - Gated to ≥75rem (`FLIP_MIN_WIDTH_QUERY` in Layout.astro; the gate is JS-only — `transition.css`
   has no matching media query any more): the right-edge constraint is the 54rem article card plus
   19.5rem of fixed left-hand width (1rem padding-left + 17.5rem first track + 1rem gap) = 73.5rem
@@ -173,9 +188,10 @@ Leaving a post at ≥75rem FLIPs in reverse (the delta flips sign). In the 75–
 a post, the sidebar is `display: none` in post mode, so it vanishes instantly while the article
 slides (unchanged from the pre-FLIP behavior); leaving a post re-displays it instantly (`display`
 cannot animate) — the known transient, now only in that band. Below 64rem nothing moves at all
-(single-column; that is the mobile fix). The navbar width change is now a snap in both directions;
-if the banner is ever re-enabled, `#top-row` has no transition to desync any more, but the banner's
-own `#main-grid`/`#banner-wrapper` transitions still animate — revisit then.
+(single-column; that is the mobile fix). The navbar narrows/widens via the O2 fake-narrowing above.
+If the banner is ever re-enabled, re-check the navbar restructure — `bannerEnabled` also gates the
+`navbar-hidden` scroll behavior on `#navbar-wrapper`, and the banner era predates
+`#navbar-glass` being a separate layer.
 
 Glass limitation: while a transform animation runs it creates a backdrop root in Chromium, so the
 article card **and the sidebar cards** render with flat glass for the 700ms flip (see

@@ -105,12 +105,20 @@ body:has(#post-container) #toc-panel {
    仅锁定正文宽度（不重排）不足以消除卡顿——移动中的 subtree 每帧布局/重绘本身就是开销。
    故页宽、列宽、侧栏负 margin 全部瞬切，视觉动画由 Layout.astro 的 FLIP 脚本以 el.animate 实现
    （合成器线程，零重排，仅 ≥75rem 启用，阈值推导见 Layout.astro）。
-   #top-row 同样瞬切：差分实验（临时禁其过渡后 5000 字长文不再卡）证实它是 FLIP 后残余卡顿的唯一
-   来源——sticky 顶栏的逐帧 max-width 布局。它不能改成 transform FLIP：#top-row 带 transform 会给
-   position:fixed 后代当包含块，且 #nav-menu-panel 的定位方式本身是脆弱细节。
+   #top-row 采用 O2"伪收窄"：布局瞬切（无任何过渡），宽度变化由 Layout.astro 的
+   startNavbarFlip 用合成器 transform 伪装，见下方 O2 块。
    保留的过渡：#toc-panel 的 max-width——正文的旁支而非祖先，只在 ≥96rem 可见，subtree 小，
-   实验证明不构成卡顿源，与 FLIP 同时长同缓动保持观感同步。
+   且其中的玻璃导轨 #toc-inner-wrapper 尺寸恒定、只随容器平移（采样区不逐帧失效），实验证明不卡。
    #main-grid 上残留的 transition duration-700 类同样不是死代码：该工具类的属性表含 transform，
    而 Layout.astro 通过 body 的 lg:is-home 切换 banner 的 translate-y，这条过渡正是给它的；
    网格自身的列宽属性虽已瞬切，这个类仍须保留 */
+
+/* ---- O2：顶栏"伪收窄"（Chrome 卡顿修复，两轮迭代）----
+   #top-row 的真实 max-width 过渡是 FLIP 后仅剩的卡顿源（差分实验证实）；O1（缩短至 300ms
+   + 过渡窗口内摘面板玻璃）实测仍有顿挫——真宽度动画的 sticky/布局逐帧重算躲不开。
+   O2 让顶栏布局与正文一样瞬切（本文件不为 #top-row 声明任何过渡），宽度变化全部由
+   Layout.astro 的 startNavbarFlip 用合成器 transform 伪装：玻璃层 scaleX 回放旧宽度、
+   三个内容组 translateX 回旧位再滑回。玻璃从面板分离（Navbar.astro 的 #navbar-glass，
+   绝对定位铺满、-z-10 垫底）是关键：变宽度的盒子不再是 backdrop-filter 载体，
+   其采样区在面板局部坐标系里恒定，不随布局逐帧失效 */
 
