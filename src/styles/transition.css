@@ -54,15 +54,22 @@ html.is-animating .transition-swup-fade {
 
 /* ---- 文章页侧栏外挂模式 ---- */
 /* body:has(#post-container) 是活性开关：#post-container 只存在于文章页，Swup 换内容时 :has() 自动重算，无需任何 JS */
-body:has(#post-container) #main-grid {
-    grid-template-columns: 0rem auto;
-    column-gap: 0;
-}
-/* 64–96rem 下侧栏 display:none 不占首列，lg+ 的 main(col-span-1) 会被自动布局进 0 宽首列而宽度归零；
-   ≥96rem 侧栏留在流内、自动布局同样落在第 2 列。统一钉死第 2 列保证两种宽度下行为一致：
-   列宽动画期间 main 左缘跟随第 2 列轨道边界平滑左移，这就是"文章补位"动画本体 */
-body:has(#post-container) #swup-container {
-    grid-column: 2;
+
+/* ---- 修复一：网格收窄仅限 lg+（≥64rem）----
+   移动端（<64rem）侧栏与正文 col-span-2 堆叠，17.5rem 首列本就是空槽；
+   若收窄规则在此生效，main 被钉到第 2 列后左缘被顶到 18.5rem 处、再随轨道动画滑回，
+   这就是移动端"文章块从右侧移入"伪影的根因。单列布局没有需要补位的对象 */
+@media (min-width: 64rem) {
+    body:has(#post-container) #main-grid {
+        grid-template-columns: 0rem auto;
+        column-gap: 0;
+    }
+    /* 64–96rem 下侧栏 display:none 不占首列，lg+ 的 main(col-span-1) 会被自动布局进 0 宽首列而宽度归零；
+       ≥96rem 侧栏留在流内、自动布局同样落在第 2 列。统一钉死第 2 列保证两种宽度下行为一致：
+       列宽动画期间 main 左缘跟随第 2 列轨道边界平滑左移，这就是"文章补位"动画本体 */
+    body:has(#post-container) #swup-container {
+        grid-column: 2;
+    }
 }
 body:has(#post-container) #sidebar {
     display: none;
@@ -98,8 +105,9 @@ body:has(#post-container) #top-row {
     }
 }
 /* 平移用 margin 而非 transform/translate：#sidebar 的 onload-animation keyframes 动 transform，独立属性互不覆盖；
-   margin 过渡也不构成 backdrop root，wallpaper 毛玻璃安全。时长与缓动与 #main-grid 一致（700ms /
-   cubic-bezier(0.4,0,0.2,1)），侧栏平移、列宽、页宽三组动画同步 */
+   margin 过渡也不构成 backdrop root，wallpaper 毛玻璃安全（Chrome 实测玻璃保持生效，仅逐帧重滤有性能成本）。
+   时长与缓动与 #main-grid 一致（700ms / cubic-bezier(0.4,0,0.2,1)），
+   侧栏平移、列宽、页宽三组动画同步 */
 #sidebar {
     transition: margin-left 0.7s cubic-bezier(0.4, 0, 0.2, 1);
 }

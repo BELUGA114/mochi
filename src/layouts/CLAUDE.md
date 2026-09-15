@@ -76,10 +76,10 @@ On post pages (`#post-container` present), three things change at once, all pure
 `src/styles/transition.css` gated on `body:has(#post-container)` (a live selector that re-evaluates
 when Swup swaps `main` — no JS hook involved): the page width narrows from `--page-width` (75rem) to
 56rem on the three width wrappers (`#top-row`, `#main-panel`, `#toc-panel` in
-`MainGridLayout.astro`; the latter two carry `transition-all duration-700`); `#main-grid` collapses
-its first track (`grid-template-columns: 0rem auto`, `column-gap: 0`); and at `min-width: 96rem`
-(2xl, the same breakpoint the TOC uses) the sidebar slides out of the page width via
-`margin-left: -18.5rem`. The variable is not overridden — `--page-width` ships as an inline `style` attribute on
+`MainGridLayout.astro`; the latter two carry `transition-all duration-700`); at `min-width: 64rem`
+(lg) `#main-grid` collapses its first track (`grid-template-columns: 0rem auto`, `column-gap: 0`);
+and at `min-width: 96rem` (2xl, the same breakpoint the TOC uses) the sidebar slides out of the page
+width via `margin-left: -18.5rem`. The variable is not overridden — `--page-width` ships as an inline `style` attribute on
 `<html>`/`<body>` (Layout.astro's `define:vars`) and the wrappers merely inherit it, so a
 wrapper-level var rule would win; overriding `max-width` directly on the three wrappers is chosen
 because it is surgical — it states exactly what changes, without re-deriving the variable for
@@ -88,6 +88,11 @@ card column (54.5rem).
 
 Non-obvious choices, do not "simplify" them away:
 
+- The grid collapse and the `grid-column: 2` pin are scoped to `min-width: 64rem`. Below lg the
+  sidebar and `main` are `col-span-2` stacked and the 17.5rem first track is an empty slot; unscoped,
+  the pin put the article's left edge 18.5rem right and the track animation slid it back — the
+  "article moves in from the right" artifact on mobile. `#sidebar { display: none }` in post mode
+  stays unscoped (mobile post pages intentionally drop the stacked sidebar).
 - `#swup-container` is pinned to `grid-column: 2` in post mode — in the 64–96rem band the sidebar is
   `display: none`, and auto-placement would drop the article into the collapsed 0-width first track
   and clip it to zero width. At ≥96rem the in-flow sidebar occupies track 1, so auto-placement lands
@@ -101,8 +106,9 @@ Non-obvious choices, do not "simplify" them away:
   keeps `#sidebar-sticky` sticky working. `width: 17.5rem` is pinned unconditionally at lg+ for the
   same reason.
 - The slide must not use `transform`/`translate`: `#sidebar` carries `.onload-animation` whose
-  keyframes animate `transform`. A margin transition also creates no backdrop root, so wallpaper
-  glass is safe — still to be verified in Chrome when browser verification runs.
+  keyframes animate `transform`. A margin transition also creates no backdrop root — verified in
+  Chrome: the wallpaper glass keeps working; it only pays a per-frame re-filter cost while the
+  layout animation runs.
 - `#main-grid` gets an unconditional extended `transition-property` (Tailwind's `transition`
   utility list plus `grid-template-columns` / `column-gap`): unconditional so the reverse
   navigation animates, full list so the banner transform transition is kept.
