@@ -22,8 +22,10 @@ declaration when editing the file, and do not convert the legacy components to r
 Rendered from `MainGridLayout.astro` on every page when `siteConfig.wallpaper` is enabled. Image paths
 follow `banner.src` rules and are resolved at build time with the same `import.meta.glob` conventions as
 `ImageWrapper.astro`; a runtime-random `<img src>` means Astro `<Image>` optimization does not apply.
-`#wallpaper` must stay outside the Swup containers. Full wallpaper context, including the card-glass rules
-that depend on it, is in `src/layouts/CLAUDE.md`.
+`#wallpaper` must stay outside the Swup containers, and its picker script must keep
+`data-swup-ignore-script` — SwupScriptsPlugin re-runs document-wide scripts on every navigation, so the
+attribute is what makes the image change only on a full reload. Full wallpaper context, including the
+card-glass rules that depend on it, is in `src/layouts/CLAUDE.md`.
 
 ## Client-side surfaces
 

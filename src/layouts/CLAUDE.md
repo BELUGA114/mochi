@@ -35,7 +35,11 @@ random image picked per site visit by an `is:inline` script (one entry in `image
 several = random per full page reload). Image paths follow `banner.src` rules and are resolved at build
 time with the same `import.meta.glob` conventions as `ImageWrapper.astro`; runtime-random `<img src>`
 means Astro `<Image>` optimization does not apply. `#wallpaper` sits outside the Swup containers, so it
-persists across in-site navigations — do not move it inside them.
+persists across in-site navigations — do not move it inside them. That alone is **not** enough to keep the
+picker script from re-running: `@swup/astro` enables `SwupScriptsPlugin` by default (`reloadScripts`), which
+re-executes every `<script>` in the whole document on each `content:replace` — outside-container scripts
+included. That is why the picker script carries `data-swup-ignore-script`; removing it makes the wallpaper
+re-randomize on every in-site navigation.
 
 Wallpaper takes precedence over the banner: the banner strip, `enable-banner` body class, `toc-hide`, and
 `mainPanelTop` are gated on `banner.enable && !wallpaper.enable` in both `Layout.astro` and
