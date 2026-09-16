@@ -36,6 +36,11 @@ card-glass rules that depend on it, is in `src/layouts/CLAUDE.md`.
   dev. Pagefind indexes `dist` as a post-build step, so real search only works after
   `pnpm build && pnpm preview`. `pagefind.yml` excludes KaTeX spans, the search panel itself, and
   `[data-pagefind-ignore]`.
+- `control/WallpaperToggle.astro` is the homepage's wallpaper-immersive switch. It only flips
+  `body.wallpaper-immersive`; every hiding rule lives in `Layout.astro`'s global style block. It must be
+  rendered on every page and stay outside the Swup containers (both are load-bearing — see
+  `src/layouts/CLAUDE.md`), and its bindings are wrapped in an idempotence guard because Astro inlines
+  import-free scripts and Swup replays them on every navigation.
 - `PostCard.astro` and the `PostPage.astro` list read `minutes`, `words`, and `excerpt` from
   `remarkPluginFrontmatter` after `entry.render()` — they are not part of the Zod schema.
 

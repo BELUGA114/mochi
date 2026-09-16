@@ -63,6 +63,90 @@ cut the panel's border.
 disables `backdrop-filter` under an animation-filled ancestor, which makes every glass surface render
 transparent-but-flat — and the bug does not reproduce in Firefox.
 
+## Wallpaper immersive mode (homepage)
+
+The floating `#wallpaper-toggle` on the homepage flips `body.wallpaper-immersive`, which hides the entire
+shell and leaves only the wallpaper. The button is rendered by `MainGridLayout.astro` next to `#wallpaper`
+and **on every page**, with visibility left to `body.is-home-page`: the markup outside the Swup containers is
+the first-load DOM and persists across in-site navigation, so gating the *render* on the homepage would mean
+a first load on a post page never gets a button at all. `is-home-page` is maintained alongside `lg:is-home`
+(first paint via `Layout.astro`'s `class:list`, then in the `visit:start` hook).
+
+**`lg:is-home` and `is-home-page` are not equivalent and must not be merged or renamed.** They are
+same-source but not same-meaning: `lg:is-home` is width-scoped (the `lg:` in the name is real — it drives the
+≥1024px banner height), while `is-home-page` is width-agnostic, because the toggle button must also appear on
+mobile, where `#back-to-top-btn` is `hidden lg:block`.
+
+The trap: `Layout.astro`'s global style block declares `.enable-banner.is-home …` rules, yet the body only
+ever receives the class token `lg:is-home`. The mechanism is Tailwind content-scanning — the literal token
+`lg:is-home` appears in the markup, so Tailwind re-emits that `@layer components` group under the variant,
+producing a **live** `@media (min-width: 1024px) { .lg\:is-home.enable-banner … }` copy alongside the
+dormant unprefixed one. Consequences a reader cannot see from the code:
+
+- Renaming or deleting `"lg:is-home"` in `Layout.astro`'s `class:list` silently deletes the ≥1024px homepage
+  banner rules. No type error, no build error, no test catches it.
+- The two homepage classes sit side by side in the same object literal, so consolidating them into one is the
+  most natural "cleanup" a reader will attempt — and it breaks the banner. Don't.
+
+Giving those banner rules an explicit selector, so the two tokens could legitimately be reconciled, is a
+separate later job: it touches the banner and navbar paths and needs its own browser verification.
+
+Hiding uses `opacity`, not `display`: `display` collapses the document height, clamps the scroll position to
+0 and cannot be transitioned, so leaving the mode would lose the reader's place. The cost is that the page is
+still scrollable through invisible content — harmless, because the wallpaper is `fixed` and nothing visible
+moves. Two things must not be "simplified" away:
+
+- `#main-panel` receives `pointer-events: none` but **never `opacity`**. `BackToTop` is a `position: fixed`
+  descendant of it, and an ancestor with `opacity < 1` becomes the containing block for fixed descendants —
+  it would visibly teleport. `BackToTop` needs its own `opacity: 0` rule anyway, because it is a *sibling* of
+  `#main-grid` rather than a descendant, so nothing else hides it; it keeps `transition: none` because its
+  own Tailwind `transition` covers `transform` and changing its duration would break `.hide`'s slide-in.
+- The opacity transition must be declared where **both** states match (`transition-opacity duration-700` on
+  `#top-row` in the markup; `#main-grid` and `#toc-panel` already carry `duration-700`). Declared only inside
+  the `body.wallpaper-immersive` rules, it would be gone on exit and the shell would snap back.
+
+`pointer-events: none` does not stop the Tab key, so the script also sets `inert` on `#top-row`, `#toc-panel`
+and `#main-panel` while the mode is on. `inert` is what the tab-order and assistive-tech story rests on — and
+it is also the only thing that can cover a descendant which re-enables hit-testing for itself, such as
+`.card-github.fetch-error` (`pointer-events: all` in `src/styles/markdown-extend.styl`); no ancestor
+`pointer-events` rule can override that. The pointer-events rules are kept as well, as the CSS-layer fallback
+for when the script has not run. Note that layers declaring their own `pointer-events: auto`
+(`#navbar-wrapper`, `#toc-inner-wrapper`, `#main-panel`) each need to be cleared explicitly — a parent's
+`none` does not reach them, and missing `#toc-inner-wrapper` left the invisible TOC rail clickable, jumping
+the scroll via its real `#slug` anchors.
+
+The wallpaper's dimming overlay is zeroed too (`#wallpaper .wallpaper-overlay`) — with every card gone it has
+no readability job left. During the 700ms transition the card glass goes flat (an `opacity < 1` ancestor is a
+Chromium backdrop root; see `src/styles/CLAUDE.md`) and self-heals at the end — accepted, same class of
+transient as the FLIP navigation.
+
+**The toggle's script is idempotence-guarded, and getting that wrong is a live trap.** Astro *inlines*
+`<script>` blocks that contain no imports, so they get no external chunk and no module-map dedupe — and
+`SwupScriptsPlugin` replays every script in the document on each `content:replace`. An unguarded script
+re-evaluates on every in-site navigation and stacks its listeners; because the button's DOM persists, the
+result is parity-dependent — at an even listener count one click toggles the mode on and straight back off, so
+the button reads as dead. In practice: a fresh load of the homepage works, arriving at the homepage by
+in-site navigation does not. The guard is a marker attribute on `document.documentElement` (`<html>` persists
+across navigation exactly like the button), wrapping every binding plus the `visit:start` hook.
+
+**Do not "fix" that with `data-swup-ignore-script`.** It is the attribute `misc/Wallpaper.astro` uses, so it
+looks like the house answer, but in an `.astro` file a hoisted `<script>` carrying **any** unrecognized
+attribute is **de-hoisted and emitted verbatim** — Astro stops bundling and transpiling it, so TypeScript
+annotations or `import` statements become a hard `SyntaxError` and the button never binds at all.
+`Wallpaper.astro` gets away with it only because its script is `is:inline` plain JS with `define:vars`, so
+there is nothing to transpile. The asymmetry that makes this easy to misjudge: scripts *with* imports are
+emitted as external chunks and dedupe through the module map, which is why `Layout.astro`'s scripts are
+unaffected — and `Navbar.astro`'s import-free script is replayed too, surviving only because it assigns
+`.onclick` (idempotent) instead of calling `addEventListener`.
+
+Two things the guard silently assumes, worth knowing before moving this component:
+
+- The button must stay **outside** the Swup containers (`main`, `#toc`). If it were ever moved inside one, a
+  navigation would swap in a fresh button with no listeners while the guard blocks re-binding — a dead button
+  after the first navigation. The `inert` requirement already forces this placement; this is a second reason.
+- The guard is only load-bearing while the script stays import-free. Adding an import would externalize it,
+  and the module map would then dedupe it — the guard becomes vestigial but stays correct, so leave it.
+
 ## Layout geometry
 
 Layout-geometry constants (banner heights, page width, `PAGE_SIZE`, theme mode names) live in
