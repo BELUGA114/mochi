@@ -1,0 +1,137 @@
+---
+import I18nKey from "@i18n/i18nKey";
+import { i18n } from "@i18n/translation";
+import { Icon } from "astro-icon/components";
+
+const labelEnter = i18n(I18nKey.wallpaperMode);
+const labelExit = i18n(I18nKey.wallpaperModeExit);
+---
+
+<!--
+	壁纸欣赏模式的开关。
+	必须在 Swup 容器外（与 Wallpaper 同层）且每一页都渲染：#main-panel 是首屏那一份 DOM、
+	跨站内导航持久，若按"是否首页"决定要不要渲染，首屏落在文章页时就永远补不上这个按钮。
+	可见性交给 body.is-home-page，由 Layout.astro 首屏渲染 + visit:start 维护。
+	另外它绝不能是被 inert 的那三个容器（#top-row / #toc-panel / #main-panel）的后代，
+	否则进入沉浸态后就没有退出的入口了。
+-->
+<div id="wallpaper-toggle" class="fixed z-40 right-4 bottom-4 transition-opacity duration-300">
+	<button id="wallpaper-toggle-btn" type="button" aria-pressed="false"
+			aria-label={labelEnter} title={labelEnter}
+			data-label-enter={labelEnter} data-label-exit={labelExit}
+			class="btn-card rounded-full h-12 w-12 text-[var(--primary)]">
+		<span class="wallpaper-toggle-icon-enter flex">
+			<Icon name="material-symbols:image-outline-rounded" class="text-[1.5rem]"></Icon>
+		</span>
+		<span class="wallpaper-toggle-icon-exit flex">
+			<Icon name="material-symbols:close-rounded" class="text-[1.5rem]"></Icon>
+		</span>
+	</button>
+</div>
+
+<script>
+	const IMMERSIVE_CLASS = "wallpaper-immersive";
+	const IDLE_CLASS = "is-idle";
+	const IDLE_DELAY_MS = 2500;
+	// 触屏没有"鼠标移动"这个信号，自动隐去会让按钮再也回不来
+	const CAN_IDLE_HIDE = window.matchMedia("(hover: hover)").matches;
+	// inert 要盖住 #main-grid、#toc-panel、BackToTop 三处交互，用各自最近的共同父层。
+	// 注意是 #main-panel 而不是 #main-grid：inert 不产生包含块，可以安全地挂在
+	// BackToTop 的 fixed 祖先上，而 opacity 不行
+	const INERT_IDS = ["top-row", "toc-panel", "main-panel"];
+
+	const toggle = document.getElementById("wallpaper-toggle");
+	const button = document.getElementById("wallpaper-toggle-btn");
+	const labelEnter = button?.dataset.labelEnter ?? "";
+	const labelExit = button?.dataset.labelExit ?? "";
+
+	let idleTimer: number | undefined;
+	let hovering = false;
+
+	function isImmersive(): boolean {
+		return document.body.classList.contains(IMMERSIVE_CLASS);
+	}
+
+	function clearIdleTimer(): void {
+		if (idleTimer !== undefined) {
+			window.clearTimeout(idleTimer);
+			idleTimer = undefined;
+		}
+	}
+
+	function showToggle(): void {
+		toggle?.classList.remove(IDLE_CLASS);
+		clearIdleTimer();
+	}
+
+	function scheduleIdle(): void {
+		clearIdleTimer();
+		// 悬停或持焦时不计时，否则按钮会在鼠标底下消失
+		if (!CAN_IDLE_HIDE || !isImmersive() || hovering) return;
+		if (button?.matches(":focus")) return;
+		idleTimer = window.setTimeout(
+			() => toggle?.classList.add(IDLE_CLASS),
+			IDLE_DELAY_MS,
+		);
+	}
+
+	// pointer-events:none 挡不住 Tab 键，键盘用户会 Tab 进看不见的导航链接
+	function setInert(on: boolean): void {
+		for (const id of INERT_IDS) {
+			document.getElementById(id)?.toggleAttribute("inert", on);
+		}
+	}
+
+	function setImmersive(on: boolean): void {
+		document.body.classList.toggle(IMMERSIVE_CLASS, on);
+		setInert(on);
+		button?.setAttribute("aria-pressed", String(on));
+		const label = on ? labelExit : labelEnter;
+		button?.setAttribute("aria-label", label);
+		button?.setAttribute("title", label);
+		showToggle();
+		scheduleIdle();
+	}
+
+	button?.addEventListener("click", () => setImmersive(!isImmersive()));
+
+	document.addEventListener("keydown", (event) => {
+		if (event.key === "Escape" && isImmersive()) {
+			setImmersive(false);
+		}
+	});
+
+	// 进入沉浸态后按钮会自己隐去，这几类信号把它叫回来
+	for (const type of ["mousemove", "touchstart", "keydown", "wheel"]) {
+		document.addEventListener(
+			type,
+			() => {
+				if (!isImmersive()) return;
+				showToggle();
+				scheduleIdle();
+			},
+			{ passive: true },
+		);
+	}
+
+	toggle?.addEventListener("mouseenter", () => {
+		hovering = true;
+		showToggle();
+	});
+	toggle?.addEventListener("mouseleave", () => {
+		hovering = false;
+		scheduleIdle();
+	});
+	toggle?.addEventListener("focusin", showToggle);
+	toggle?.addEventListener("focusout", scheduleIdle);
+
+	const setup = () => {
+		// 浏览器前进/后退也能在沉浸态下离开首页，届时必须整个复位
+		window.swup.hooks.on("visit:start", () => setImmersive(false));
+	};
+	if (window?.swup?.hooks) {
+		setup();
+	} else {
+		document.addEventListener("swup:enable", setup);
+	}
+</script>

@@ -313,6 +313,21 @@ const bannerOffset =
 	body.wallpaper-immersive #wallpaper .wallpaper-overlay {
 		opacity: 0;
 	}
+	/* 两个图标二选一；按钮只在首页出现 */
+	body.wallpaper-immersive .wallpaper-toggle-icon-enter {
+		display: none;
+	}
+	body:not(.wallpaper-immersive) .wallpaper-toggle-icon-exit {
+		display: none;
+	}
+	body:not(.is-home-page) #wallpaper-toggle {
+		display: none;
+	}
+	/* 空闲态由脚本打标；过渡写在 #wallpaper-toggle 的 markup 上，两个状态都匹配 */
+	#wallpaper-toggle.is-idle {
+		opacity: 0;
+		pointer-events: none;
+	}
 }
 </style>
 

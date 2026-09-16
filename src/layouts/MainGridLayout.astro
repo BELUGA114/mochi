@@ -1,5 +1,6 @@
 ---
 import BackToTop from "@components/control/BackToTop.astro";
+import WallpaperToggle from "@components/control/WallpaperToggle.astro";
 import Footer from "@components/Footer.astro";
 import Wallpaper from "@components/misc/Wallpaper.astro";
 import Navbar from "@components/Navbar.astro";
@@ -71,6 +72,8 @@ const mainPanelTop = bannerEnabled
 
 <!-- Site-wide wallpaper background, outside the swup containers so it persists across navigations -->
 {wallpaper && <Wallpaper config={wallpaper} />}
+{/* 开关与 #wallpaper 同层：既在 Swup 容器外，也不在任何会被 inert 的容器内。理由见组件顶部注释 */}
+{wallpaper && <WallpaperToggle />}
 
 <!-- Main content -->
 <div class="absolute w-full z-30 pointer-events-none" style={`top: ${mainPanelTop}`}>
