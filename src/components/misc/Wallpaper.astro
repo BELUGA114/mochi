@@ -51,8 +51,8 @@ for (const src of config.images) {
 {resolvedImages.length > 0 && (
 <div id="wallpaper" class="fixed inset-0 -z-10 pointer-events-none overflow-hidden">
 	<img id="wallpaper-img" class="w-full h-full object-cover transition duration-700 opacity-0" alt="" />
-	<div class="absolute inset-0 dark:hidden" style={`background: rgba(0,0,0,${overlay.light})`}></div>
-	<div class="absolute inset-0 hidden dark:block" style={`background: rgba(0,0,0,${overlay.dark})`}></div>
+	<div class="wallpaper-overlay absolute inset-0 transition-opacity duration-700 dark:hidden" style={`background: rgba(0,0,0,${overlay.light})`}></div>
+	<div class="wallpaper-overlay absolute inset-0 transition-opacity duration-700 hidden dark:block" style={`background: rgba(0,0,0,${overlay.dark})`}></div>
 </div>
 )}
 

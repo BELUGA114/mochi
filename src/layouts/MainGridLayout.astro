@@ -55,7 +55,7 @@ const mainPanelTop = bannerEnabled
 <!-- Navbar -->
 <slot slot="head" name="head"></slot>
 <!-- 无任何过渡：顶栏布局与正文一起瞬切，宽度动画由 Layout.astro 的 O2 脚本以 transform 伪装，见 transition.css -->
-<div id="top-row" class="z-50 pointer-events-none relative max-w-[var(--page-width)] px-0 md:px-4 mx-auto" class:list={[""]}>
+<div id="top-row" class="z-50 pointer-events-none relative max-w-[var(--page-width)] px-0 md:px-4 mx-auto transition-opacity duration-700" class:list={[""]}>
     <div id="navbar-wrapper" class="pointer-events-auto sticky top-0 transition-all">
         <Navbar></Navbar>
     </div>

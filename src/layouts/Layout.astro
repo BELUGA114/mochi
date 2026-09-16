@@ -271,6 +271,36 @@ const bannerOffset =
 		background-color: rgba(18, 18, 26, 0.5);
 		border-color: rgba(255, 255, 255, 0.1);
 	}
+
+	/* ---- 壁纸欣赏模式 ----
+	   用 opacity 而非 display 隐藏：display 会塌缩文档高度、把滚动位置钳到 0，
+	   退出时回不到原来的阅读位置，且无法过渡。opacity 保留布局——零重排、零滚动跳变，
+	   Swup 容器也完好无损。代价是页面仍可滚动（滚的是看不见的内容），
+	   但壁纸是 fixed，滚动不产生任何可见变化。
+	   过渡类写在 markup 上（两个状态都匹配），只写在这组规则里的话退出时会瞬切 */
+	body.wallpaper-immersive #top-row,
+	body.wallpaper-immersive #main-grid,
+	body.wallpaper-immersive #toc-panel {
+		opacity: 0;
+		pointer-events: none;
+	}
+	/* #top-row 自身是 pointer-events:none，其子 #navbar-wrapper 是 auto，需要单独摘掉。
+	   这里只改 pointer-events、不给 opacity —— #navbar-wrapper 带 transition-all，
+	   opacity 会以 150ms 抢在父层 700ms 之前把整个顶栏抹掉 */
+	body.wallpaper-immersive #top-row #navbar-wrapper {
+		pointer-events: none;
+	}
+	/* BackToTop 是 #main-grid 的兄弟且为 fixed：opacity<1 的祖先会成为它的包含块，
+	   让它跟着淡出会在淡出过程中可见地跳位，故单独瞬切隐身 */
+	body.wallpaper-immersive #back-to-top-btn {
+		opacity: 0;
+		transition: none;
+		pointer-events: none;
+	}
+	/* 卡片都藏了，遮罩失去"保证文字可读"这个唯一职责 */
+	body.wallpaper-immersive #wallpaper .wallpaper-overlay {
+		opacity: 0;
+	}
 }
 </style>
 
