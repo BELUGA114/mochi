@@ -93,45 +93,54 @@ const labelExit = i18n(I18nKey.wallpaperModeExit);
 		scheduleIdle();
 	}
 
-	button?.addEventListener("click", () => setImmersive(!isImmersive()));
+	// SwupScriptsPlugin 会在每次 content:replace 时重放整篇文档里的 inline <script>
+	// （见 src/layouts/CLAUDE.md），而按钮在 Swup 容器外、DOM 是同一份，
+	// 重放会叠加监听：监听数为偶数时点一次等于"进入又立刻退出"，按钮看起来完全失灵。
+	// <html> 与按钮一样跨导航持久，用它的标记属性把下面的绑定限制为一次。
+	const READY_ATTR = "data-wallpaper-toggle-ready";
+	if (!document.documentElement.hasAttribute(READY_ATTR)) {
+		document.documentElement.setAttribute(READY_ATTR, "");
 
-	document.addEventListener("keydown", (event) => {
-		if (event.key === "Escape" && isImmersive()) {
-			setImmersive(false);
+		button?.addEventListener("click", () => setImmersive(!isImmersive()));
+
+		document.addEventListener("keydown", (event) => {
+			if (event.key === "Escape" && isImmersive()) {
+				setImmersive(false);
+			}
+		});
+
+		// 进入沉浸态后按钮会自己隐去，这几类信号把它叫回来
+		for (const type of ["mousemove", "touchstart", "keydown", "wheel"]) {
+			document.addEventListener(
+				type,
+				() => {
+					if (!isImmersive()) return;
+					showToggle();
+					scheduleIdle();
+				},
+				{ passive: true },
+			);
 		}
-	});
 
-	// 进入沉浸态后按钮会自己隐去，这几类信号把它叫回来
-	for (const type of ["mousemove", "touchstart", "keydown", "wheel"]) {
-		document.addEventListener(
-			type,
-			() => {
-				if (!isImmersive()) return;
-				showToggle();
-				scheduleIdle();
-			},
-			{ passive: true },
-		);
-	}
+		toggle?.addEventListener("mouseenter", () => {
+			hovering = true;
+			showToggle();
+		});
+		toggle?.addEventListener("mouseleave", () => {
+			hovering = false;
+			scheduleIdle();
+		});
+		toggle?.addEventListener("focusin", showToggle);
+		toggle?.addEventListener("focusout", scheduleIdle);
 
-	toggle?.addEventListener("mouseenter", () => {
-		hovering = true;
-		showToggle();
-	});
-	toggle?.addEventListener("mouseleave", () => {
-		hovering = false;
-		scheduleIdle();
-	});
-	toggle?.addEventListener("focusin", showToggle);
-	toggle?.addEventListener("focusout", scheduleIdle);
-
-	const setup = () => {
-		// 浏览器前进/后退也能在沉浸态下离开首页，届时必须整个复位
-		window.swup.hooks.on("visit:start", () => setImmersive(false));
-	};
-	if (window?.swup?.hooks) {
-		setup();
-	} else {
-		document.addEventListener("swup:enable", setup);
+		const setup = () => {
+			// 浏览器前进/后退也能在沉浸态下离开首页，届时必须整个复位
+			window.swup.hooks.on("visit:start", () => setImmersive(false));
+		};
+		if (window?.swup?.hooks) {
+			setup();
+		} else {
+			document.addEventListener("swup:enable", setup);
+		}
 	}
 </script>
