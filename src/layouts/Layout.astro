@@ -284,14 +284,26 @@ const bannerOffset =
 		opacity: 0;
 		pointer-events: none;
 	}
-	/* #top-row 自身是 pointer-events:none，其子 #navbar-wrapper 是 auto，需要单独摘掉。
-	   这里只改 pointer-events、不给 opacity —— #navbar-wrapper 带 transition-all，
-	   opacity 会以 150ms 抢在父层 700ms 之前把整个顶栏抹掉 */
-	body.wallpaper-immersive #top-row #navbar-wrapper {
+	/* #top-row 是 pointer-events:none 但子层 #navbar-wrapper 是 auto；#toc-panel 同理，
+	   子层 #toc-inner-wrapper 是 auto。父层置 none 对子层无效，两处都必须单独摘掉 ——
+	   否则看不见的导航链接和 TOC 导轨仍然可点（TOC 里是真实的锚点链接，
+	   点了会在毫无显示的页面上静默跳转滚动）。
+	   这两层只改 pointer-events：父层已经负责 opacity，且 #navbar-wrapper 带 transition-all，
+	   给它 opacity 会以 150ms 抢在父层 700ms 之前把顶栏抹掉 */
+	body.wallpaper-immersive #top-row #navbar-wrapper,
+	body.wallpaper-immersive #toc-inner-wrapper {
 		pointer-events: none;
 	}
-	/* BackToTop 是 #main-grid 的兄弟且为 fixed：opacity<1 的祖先会成为它的包含块，
-	   让它跟着淡出会在淡出过程中可见地跳位，故单独瞬切隐身 */
+	/* #main-panel 自身是 auto（把 #main-grid 置 none 不会连带它），不摘掉的话它那块
+	   透明盒子仍会捕获指针、允许在不可见正文里拖选。
+	   只写 pointer-events，绝不给 opacity —— BackToTop 是它的 fixed 后代，
+	   opacity<1 的祖先会成为 fixed 后代的包含块，让 BackToTop 跳位 */
+	body.wallpaper-immersive #main-panel {
+		pointer-events: none;
+	}
+	/* BackToTop 是 #main-grid 的兄弟而非后代，不会跟着上面的规则淡出，必须单独隐藏。
+	   transition:none 是刻意的：它带 Tailwind 的 transition（属性表含 transform），
+	   在它身上改过渡时长会破坏 .hide 的滑入动画，故选择瞬切 */
 	body.wallpaper-immersive #back-to-top-btn {
 		opacity: 0;
 		transition: none;
