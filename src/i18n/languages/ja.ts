@@ -35,4 +35,6 @@ export const ja: Translation = {
 	[Key.author]: "作者",
 	[Key.publishedAt]: "公開日",
 	[Key.license]: "ライセンス",
+	[Key.wallpaperMode]: "壁紙を鑑賞",
+	[Key.wallpaperModeExit]: "壁紙の鑑賞を終了",
 };

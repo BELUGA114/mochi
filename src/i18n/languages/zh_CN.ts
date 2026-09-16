@@ -35,4 +35,6 @@ export const zh_CN: Translation = {
 	[Key.author]: "作者",
 	[Key.publishedAt]: "发布于",
 	[Key.license]: "许可协议",
+	[Key.wallpaperMode]: "欣赏壁纸",
+	[Key.wallpaperModeExit]: "退出欣赏壁纸",
 };
