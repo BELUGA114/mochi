@@ -101,7 +101,12 @@ const labelExit = i18n(I18nKey.wallpaperModeExit);
 	if (!document.documentElement.hasAttribute(READY_ATTR)) {
 		document.documentElement.setAttribute(READY_ATTR, "");
 
-		button?.addEventListener("click", () => setImmersive(!isImmersive()));
+		button?.addEventListener("click", (event) => {
+			setImmersive(!isImmersive());
+			// 鼠标点击会把焦点留在按钮上，scheduleIdle 的 :focus 检查会让按钮永远不隐去。
+			// 键盘激活时 detail === 0，保留焦点，Tab 用户仍看得见自己的落点
+			if (event.detail > 0) button?.blur();
+		});
 
 		document.addEventListener("keydown", (event) => {
 			if (event.key === "Escape" && isImmersive()) {

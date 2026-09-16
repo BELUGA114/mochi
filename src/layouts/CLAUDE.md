@@ -109,11 +109,14 @@ moves. Two things must not be "simplified" away:
 and `#main-panel` while the mode is on. `inert` is what the tab-order and assistive-tech story rests on — and
 it is also the only thing that can cover a descendant which re-enables hit-testing for itself, such as
 `.card-github.fetch-error` (`pointer-events: all` in `src/styles/markdown-extend.styl`); no ancestor
-`pointer-events` rule can override that. The pointer-events rules are kept as well, as the CSS-layer fallback
-for when the script has not run. Note that layers declaring their own `pointer-events: auto`
-(`#navbar-wrapper`, `#toc-inner-wrapper`, `#main-panel`) each need to be cleared explicitly — a parent's
-`none` does not reach them, and missing `#toc-inner-wrapper` left the invisible TOC rail clickable, jumping
-the scroll via its real `#slug` anchors.
+`pointer-events` rule can override that. The pointer-events rules are kept as well — but **not** as a
+script-less fallback, which would be hollow: nothing can set `body.wallpaper-immersive` without the script
+either, so there is no such state to cover. They are kept so that the whole hiding layer is pure CSS: adding
+the class by hand in DevTools hides and disables the shell with no JS involved, and the class alone is
+sufficient to make it inert to the pointer if it is ever set by other means. Note that layers declaring their
+own `pointer-events: auto` (`#navbar-wrapper`, `#toc-inner-wrapper`, `#main-panel`) each need to be cleared
+explicitly — a parent's `none` does not reach them, and missing `#toc-inner-wrapper` left the invisible TOC
+rail clickable, jumping the scroll via its real `#slug` anchors.
 
 The wallpaper's dimming overlay is zeroed too (`#wallpaper .wallpaper-overlay`) — with every card gone it has
 no readability job left. During the 700ms transition the card glass goes flat (an `opacity < 1` ancestor is a

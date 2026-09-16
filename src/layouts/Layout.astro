@@ -302,8 +302,8 @@ const bannerOffset =
 		pointer-events: none;
 	}
 	/* BackToTop 是 #main-grid 的兄弟而非后代，不会跟着上面的规则淡出，必须单独隐藏。
-	   transition:none 是刻意的：它带 Tailwind 的 transition（属性表含 transform），
-	   在它身上改过渡时长会破坏 .hide 的滑入动画，故选择瞬切 */
+	   瞬切是刻意的选择：它不参与 700ms 的节奏，比其余组件早一步消失。
+	   这条规则只在沉浸态生效，退出时 Tailwind 的 transition 自动回到匹配集 */
 	body.wallpaper-immersive #back-to-top-btn {
 		opacity: 0;
 		transition: none;
