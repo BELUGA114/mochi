@@ -35,6 +35,7 @@ export const es: Translation = {
 	[Key.author]: "Autor",
 	[Key.publishedAt]: "Publicado el",
 	[Key.license]: "Licencia",
-	[Key.wallpaperMode]: "Ver el fondo",
-	[Key.wallpaperModeExit]: "Salir de la vista del fondo",
+
+	[Key.wallpaperMode]: "Ver el fondo de pantalla",
+	[Key.wallpaperModeExit]: "Salir de la vista del fondo de pantalla",
 };

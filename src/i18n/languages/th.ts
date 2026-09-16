@@ -35,6 +35,7 @@ export const th: Translation = {
 	[Key.author]: "ผู้เขียน",
 	[Key.publishedAt]: "เผยแพร่เมื่อ",
 	[Key.license]: "สัญญาอนุญาต",
+
 	[Key.wallpaperMode]: "ชมวอลเปเปอร์",
 	[Key.wallpaperModeExit]: "ออกจากการชมวอลเปเปอร์",
 };

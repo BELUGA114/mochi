@@ -35,6 +35,7 @@ export const id: Translation = {
 	[Key.author]: "Penulis",
 	[Key.publishedAt]: "Diterbitkan pada",
 	[Key.license]: "Lisensi",
+
 	[Key.wallpaperMode]: "Lihat wallpaper",
-	[Key.wallpaperModeExit]: "Keluar dari mode wallpaper",
+	[Key.wallpaperModeExit]: "Keluar dari tampilan wallpaper",
 };

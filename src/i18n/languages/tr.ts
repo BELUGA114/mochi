@@ -35,6 +35,7 @@ export const tr: Translation = {
 	[Key.author]: "Yazar",
 	[Key.publishedAt]: "Yayınlanma:",
 	[Key.license]: "Lisans",
+
 	[Key.wallpaperMode]: "Duvar kağıdını görüntüle",
 	[Key.wallpaperModeExit]: "Duvar kağıdı görünümünden çık",
 };
