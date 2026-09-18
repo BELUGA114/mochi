@@ -33,7 +33,7 @@ draft: false
 
 **"mode" 四选一，客户端、服务端默认值都是 "auto"：**
 
-- "auto" - 客户端：一律 packet-up，**REALITY 时 stream-one**（有 `downloadSettings` 时 stream-up）/ 服务端：同时接受三种模式
+- "auto" - 客户端：一律 packet-up，REALITY 时 stream-one（有 `downloadSettings` 时 stream-up）/ 服务端：同时接受三种模式
 - "packet-up" - 客户端：分包上行 + 流式下行（单独的子连接）/ 服务端：仅接受 packet-up
 - "stream-up" - 客户端：流式上行 + 流式下行（另一条子连接）/ 服务端：仅接受 stream-up 和 stream-one
 - "stream-one" - 客户端：流式上行 + 流式下行（同一条子连接），不能有 downloadSettings / 服务端：仅接受 stream-one
@@ -56,6 +56,26 @@ draft: false
 **stream-up 专属参数**：
 
 - `scStreamUpServerSecs`：仅服务端，默认 `"20-80"` 随机，每隔该时长向 stream-up 上行 POST 的响应方向写 `xPaddingBytes` 个字节保活（前提是请求带了 padding，默认总是带），设 `-1` 停发保活数据
+
+## HTTP 版本（H1 / H2 / H3）
+
+XHTTP 的三种 mode 是选择工作模式的，ALPN 才是选择底层 HTTP 版本的，它们之间是解耦、可以任意组合的；ALPN 版本由客户端单方面决定，顺序如下：
+
+| 客户端配置                                | 结果     |
+| ----------------------------------------- | -------- |
+| 只要有 `realitySettings`                  | H2       |
+| 无 `tlsSettings` 也无 REALITY             | HTTP/1.1 |
+| `alpn` 为 `["http/1.1"]`                  | HTTP/1.1 |
+| `alpn` 为 `["h3"]`                        | H3       |
+| 其余情况（不写 `alpn`、写多项、写别的值） | H2       |
+
+**注意：**
+
+- H3 的条件是 `alpn` 仅有一项且值为 `h3`，`"alpn": ["h3", "h2"]` 得到的是 H2，客户端不会优先 H3、失败退回 H2
+
+- 服务端 `alpn` 为 `["h3"]` 时才监听 UDP/QUIC，否则一律监听 TCP
+
+- 套 CF 时客户端 H3 会被降成 H1/H2 回源，服务端无需监听 UDP
 
 ## XMUX
 
@@ -82,7 +102,7 @@ H2/H3 均为 0-RTT 多路复用，XMUX 是控制它们的核心接口：
 
 ## 请求混淆
 
-padding 默认放在 `Referer: /yourpath?x_padding=XXXX...`，这些在 CDN、反代的访问日志与 WAF 规则里都是显眼的模式，后续版本加入了混淆参数，把元数据挪走并随机化：
+padding 默认放在 `Referer: /yourpath?x_padding=XXXX...`，这些在 CDN、反代的访问日志与 WAF 规则里都是显眼的模式，而混淆参数可以把元数据挪走并随机化：
 
 | 参数                   | 作用                                                                    | 默认值                                      |
 | ---------------------- | ----------------------------------------------------------------------- | ------------------------------------------- |
@@ -171,7 +191,7 @@ REALITY 时客户端固定使用 H2，XTLS/Vision 只在 TCP+TLS/REALITY 下可�
 | 新连接延迟       | 每条代理连接一次 TCP+TLS 握手     | XMUX 复用，新请求 0-RTT，延迟更低     |
 | 多线程测速       | 更强，每条连接独立拥塞窗口        | 不如 Vision，除非 `maxConcurrency: 1` |
 | CPU / 吞吐       | Linux 下自动 Splice，内核直接转发 | 无 Splice，H2 帧处理走用户态          |
-| 上下行分离       | 没有                              | 有（需 packet-up/stream-up）          |
+| 上下行分离       | 没有                              | 有（packet-up/stream-up）             |
 | 中间盒/CDN       | 不可能                            | 本身为此设计                          |
 | 抗单连接时序分析 | Vision 内层握手随机填充           | padding + XMUX 随机化 + 多流混合      |
 
@@ -318,7 +338,7 @@ H2 且要流式上行时显式指定 `mode`（需 CF 面板开 gRPC 支持）：
 }
 ```
 
-客户端连 CF 边缘 IP，SNI 为 cf1，CF 用边缘证书握手，按 Host 回源到 VPS 的端口，验证 Origin 证书后转发给 Xray。H3 版客户端跑 quic-go QUIC，到 CF 被降成 H1/H2 回源，服务端无需监听 UDP。
+客户端连 CF 边缘 IP，SNI 为 cf1，CF 用边缘证书握手，按 Host 回源到 VPS 的端口，验证 Origin 证书后转发给 Xray。
 
 CF 会掐断下行 100 秒无实际数据的 HTTP，代理长连接需应用层保活，比如 sshd 的 `ClientAliveInterval`。
 
@@ -378,7 +398,7 @@ location /yourpath {
 }
 ```
 
-客户端不出现新块，沿用 [上文](#过-CDNTLS) 的字段。
+客户端不出现新块，沿用 [上文](#过-cdntls) 的字段。
 
 ### 上下行分离
 
@@ -640,9 +660,9 @@ XHTTP H3 无协商机制，用不了 `brutal`，只能用免协商的 `force-bru
 
 ## 域名与 Cloudflare
 
-橙云子域：CF 代理流量，可做 CDN 优选、域前置、回源目标。
+**橙云子域：** CF 代理流量，可做 CDN 优选、域前置、回源目标。
 
-灰云子域：CF 只做 DNS 解析、不代理。适合给直连节点当 `address`，只有灰云才解析出 VPS 真实 IP。
+**灰云子域：** CF 只做 DNS 解析、不代理，只有灰云才能解析出真实 IP，适合给直连节点当 `address`。
 
 当面板 SSL 模式为 Flexible 时，CF 回源走明文 HTTP，建议使用 Full (strict) 并配证书。
 
@@ -657,7 +677,7 @@ CF 面板开启 ECH 后，客户端在 `tlsSettings` 加 `echConfigList` 即可�
 ```json title="客户端"
 "tlsSettings": {
   "serverName": "cf1.domain.com",
-  "alpn": ["h3", "h2"],
+  "alpn": ["h2"],
   "echConfigList": "cf1.domain.com+udp://223.5.5.5:53"
 }
 ```

@@ -70,7 +70,7 @@ export const navBarConfig: NavBarConfig = {
 
 export const profileConfig: ProfileConfig = {
 	avatar: "assets/images/mochi.png", // Relative to the /src directory. Relative to the /public directory if it starts with '/'
-	name: "Mochi团子",
+	name: "Mochi",
 	bio: "你是一袋猫粮",
 	links: [
 		{
