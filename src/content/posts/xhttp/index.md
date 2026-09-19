@@ -1,7 +1,7 @@
 ---
-title: XHTTP 原理、玩法与实战配置
+title: XHTTP 原理、配置字段与玩法
 published: 2026-08-03
-description: 对 XHTTP 官方文档的研读与实践：三种模式与 XMUX 的取舍、过 CF 与 Nginx 前置的配置，以及上下行分离、REALITY 混搭等进阶玩法。
+description: 对 XHTTP 官方文档和源码的研读与实践：三种模式、XMUX 与请求混淆的取舍，过 CF 与 Nginx 前置以及上下行分离、REALITY 混搭等玩法。
 image: ""
 tags: [VPS, Xray, XHTTP, REALITY, Cloudflare]
 category: 网络
@@ -10,7 +10,7 @@ draft: false
 
 ## 前言
 
-本文来自对 [XHTTP: Beyond REALITY](https://github.com/XTLS/Xray-core/discussions/4113) 与 [官方文档](https://xtls.github.io/config/) 的研读和实践，以源码为准，文档过时处已逐一更正并标注。
+本文来自对 [XHTTP: Beyond REALITY](https://github.com/XTLS/Xray-core/discussions/4113) 与 Xray-core v26.6.1 源码的研读和实践。
 
 配置基于 Xray v26.9.8 的字段名，示例统一使用以下占位：`domain.com` 为主域名，`cf1.domain.com` / `cf2.domain.com` / `cf3.domain.com` 为开启橙云的子域，`/yourpath` 为 XHTTP path，`vpsadmin` 账户运行 Xray，证书目录 `~/xray_cert`。
 
@@ -41,9 +41,9 @@ draft: false
 **模式细节**：
 
 - packet-up 的 seq 从 0 开始，必须发完上一个 POST 的 body 再发下一个；乱序到达由服务端按 seq 重组，默认最多缓存 30 个，超限断连。会话 ID 与 seq 默认拼在 path（`/yourpath/UUID/seq`），开启混淆后也可挪到 query、header 或 cookie
-- stream-up / stream-one 的上行默认带 `Content-Type: application/grpc` 伪装（`noGRPCHeader` 可关），加上这个 header 后 H2 流式上行可穿透 CF，需面板开 gRPC 支持
+- stream-up / stream-one 的上行默认带 `Content-Type: application/grpc` 伪装（配置 `noGRPCHeader` 可关闭），加上这个 header 后 H2 流式上行可穿透 CF，需面板开 gRPC 支持
 - stream-one 的 path 若末尾无 `/` 会自动补上
-- 下行响应头与 packet-up 一致；stream-one 会出现以 SSE 回应 gRPC 的组合，遇到问题试 `noSSEHeader`
+- 下行响应头与 packet-up 一致；stream-one 会出现以 SSE 回应 gRPC 的情况，遇到问题可尝试配置 `noSSEHeader`
 
 **packet-up 专属参数**：
 
@@ -51,15 +51,15 @@ draft: false
 - `scMinPostsIntervalMs`：仅客户端，单个代理请求内 POST 的最小间隔，默认 30ms
 - `scMaxBufferedPosts`：仅服务端，最多缓存的 POST 数，默认 30
 
-前两个建议填范围字符串（如 `"500000-1000000"`）每次随机，减少指纹。三者均基于单个代理请求独立计数。
+前两项建议填范围字符串（如 `"500000-1000000"`）每次随机，减少指纹，三者均基于单个代理请求独立计数。
 
 **stream-up 专属参数**：
 
-- `scStreamUpServerSecs`：仅服务端，默认 `"20-80"` 随机，每隔该时长向 stream-up 上行 POST 的响应方向写 `xPaddingBytes` 个字节保活（前提是请求带了 padding，默认总是带），设 `-1` 停发保活数据
+- `scStreamUpServerSecs`：仅服务端，默认 `"20-80"` 随机，每隔该时长向 stream-up 上行 POST 的响应方向写 `xPaddingBytes` 个字节保活（前提是请求携带 padding，默认总是携带），设 `-1` 停发保活数据
 
 ## HTTP 版本（H1 / H2 / H3）
 
-XHTTP 的三种 mode 是选择工作模式的，ALPN 才是选择底层 HTTP 版本的，它们之间是解耦、可以任意组合的；ALPN 版本由客户端单方面决定，顺序如下：
+三种 mode 决定工作模式，ALPN 决定底层 HTTP 版本，它们之间是解耦、可以任意组合的；ALPN 由客户端单方面决定：
 
 | 客户端配置                                | 结果     |
 | ----------------------------------------- | -------- |
@@ -79,7 +79,7 @@ XHTTP 的三种 mode 是选择工作模式的，ALPN 才是选择底层 HTTP 版
 
 ## XMUX
 
-H2/H3 均为 0-RTT 多路复用，XMUX 是控制它们的核心接口：
+XMUX 仅在客户端设置，H2/H3 均为 0-RTT 多路复用，XMUX 是控制它们的核心接口：
 
 | 参数               | 含义                                                                | 全 0 时的默认值    |
 | ------------------ | ------------------------------------------------------------------- | ------------------ |
@@ -104,25 +104,25 @@ H2/H3 均为 0-RTT 多路复用，XMUX 是控制它们的核心接口：
 
 padding 默认放在 `Referer: /yourpath?x_padding=XXXX...`，这些在 CDN、反代的访问日志与 WAF 规则里都是显眼的模式，而混淆参数可以把元数据挪走并随机化：
 
-| 参数                   | 作用                                                                    | 默认值                                      |
-| ---------------------- | ----------------------------------------------------------------------- | ------------------------------------------- |
-| `xPaddingBytes`        | padding 长度范围（不可关闭，填 0 或负数会报错）                         | 100-1000 随机                               |
-| `xPaddingObfsMode`     | 总开关，开启后 padding 的位置与样式按下列参数走                         | `false`（固定 `Referer` + `x_padding`）     |
-| `xPaddingPlacement`    | padding 放哪：`queryInHeader` / `cookie` / `header` / `query`           | `queryInHeader`                             |
-| `xPaddingMethod`       | padding 内容：`repeat-x`（重复 `X`）/ `tokenish`（随机 Base62）         | `repeat-x`                                  |
-| `xPaddingKey`          | query / cookie 的键名                                                   | `x_padding`                                 |
-| `xPaddingHeader`       | 承载 query 的头名（例如 `Referer`、`Origin` 等）                        | `X-Padding`                                 |
-| `sessionIDPlacement`   | 会话 ID 放哪：`path` / `query` / `header` / `cookie`                    | `path`                                      |
-| `sessionIDKey`         | 非 path 放置时承载会话 ID 的键名（头名 / 参数名 / cookie 名）           | `X-Session` / `x_session`（由放置位置决定） |
-| `sessionIDTable`       | 会话 ID 的字符表（预置 `Base62`、`Alphabet`、`hex` 等）                 | 空（用 UUID）                               |
-| `sessionIDLength`      | 会话 ID 的长度范围                                                      | 空（用 UUID）                               |
-| `seqPlacement`         | seq 放哪：`path` / `query` / `header` / `cookie`                        | `path`                                      |
-| `seqKey`               | 非 path 放置时承载 seq 的键名（头名 / 参数名 / cookie 名）              | `X-Seq` / `x_seq`（由放置位置决定）         |
-| `uplinkDataPlacement`  | packet-up 上行数据放 `body` / `header` / `cookie`（后两者仅 packet-up） | `body`                                      |
-| `uplinkDataKey`        | 非 body 放置时承载上行数据的键名（头名 / cookie 名）                    | `X-Data` / `x_data`（由放置位置决定）       |
-| `uplinkChunkSize`      | 数据放 header / cookie 时每块编码后的大小                               | header 3-4KB / cookie 2-3KB                 |
-| `uplinkHTTPMethod`     | 上行 HTTP 方法，`GET` 仅 packet-up 可用                                 | `POST`                                      |
-| `serverMaxHeaderBytes` | 服务端接受的最大请求头字节数                                            | 8192                                        |
+| 参数                   | 作用                                                                        | 默认值                                      |
+| ---------------------- | --------------------------------------------------------------------------- | ------------------------------------------- |
+| `xPaddingBytes`        | padding 长度范围（不可关闭，填 0 或负数会报错）                             | 100-1000 随机                               |
+| `xPaddingObfsMode`     | 总开关，开启后 padding 的位置与样式按下列参数走                             | `false`（固定 `Referer` + `x_padding`）     |
+| `xPaddingPlacement`    | padding 放哪：`queryInHeader` / `cookie` / `header` / `query`               | `queryInHeader`                             |
+| `xPaddingMethod`       | padding 内容：`repeat-x`（重复 `X`）/ `tokenish`（随机 Base62）             | `repeat-x`                                  |
+| `xPaddingKey`          | query / cookie 的键名                                                       | `x_padding`                                 |
+| `xPaddingHeader`       | 承载 query 的头名（例如 `Referer`、`Origin` 等）                            | `X-Padding`                                 |
+| `sessionIDPlacement`   | 会话 ID 放哪：`path` / `query` / `header` / `cookie`                        | `path`                                      |
+| `sessionIDKey`         | 非 path 放置时承载会话 ID 的键名（头名 / 参数名 / cookie 名）               | `X-Session` / `x_session`（由放置位置决定） |
+| `sessionIDTable`       | 会话 ID 的字符表（预置 `Base62`、`Alphabet`、`hex` 等）                     | 空（用 UUID）                               |
+| `sessionIDLength`      | 会话 ID 的长度范围                                                          | 空（用 UUID）                               |
+| `seqPlacement`         | seq 放哪：`path` / `query` / `header` / `cookie`                            | `path`                                      |
+| `seqKey`               | 非 path 放置时承载 seq 的键名（头名 / 参数名 / cookie 名）                  | `X-Seq` / `x_seq`（由放置位置决定）         |
+| `uplinkDataPlacement`  | packet-up 上行数据放哪： `body` / `header` / `cookie`（后两者仅 packet-up） | `body`                                      |
+| `uplinkDataKey`        | 非 body 放置时承载上行数据的键名（头名 / cookie 名）                        | `X-Data` / `x_data`（由放置位置决定）       |
+| `uplinkChunkSize`      | 数据放 header / cookie 时每块编码后的大小                                   | header 3-4KB / cookie 2-3KB                 |
+| `uplinkHTTPMethod`     | 上行 HTTP 方法，`GET` 仅 packet-up 可用                                     | `POST`                                      |
+| `serverMaxHeaderBytes` | 服务端接受的最大请求头字节数                                                | 8192                                        |
 
 `extra` 字段用于向客户端分享配置，服务端只认自己 `xhttpSettings` 里的同名参数：
 
@@ -195,9 +195,9 @@ REALITY 时客户端固定使用 H2，XTLS/Vision 只在 TCP+TLS/REALITY 下可�
 | 中间盒/CDN       | 不可能                            | 本身为此设计                          |
 | 抗单连接时序分析 | Vision 内层握手随机填充           | padding + XMUX 随机化 + 多流混合      |
 
-纯直连、要单流拉满带宽、服务器 CPU 不富裕、跑 Linux，适合 RAW。
+- 适合 RAW：纯直连、要单流拉满带宽、服务器 CPU 不富裕、Linux环境
 
-网页浏览、有大量小连接、要上下行分离、要过 CDN 或前置反代，适合 XHTTP。
+- 适合 XHTTP：网页浏览、有大量小连接、要上下行分离、要过 CDN 或前置反代
 
 ## 玩法与示例配置
 
@@ -670,7 +670,51 @@ XHTTP H3 无协商机制，用不了 `brutal`，只能用免协商的 `force-bru
 
 CF 面板可以再加一条 Cache Rules，按 CDN 主机名或 XHTTP path 匹配、缓存资格设为绕过（Bypass），虽然 XHTTP 下行本来就不进缓存，但可以预防 CF 版本行为变化。
 
-### ECH：加密 SNI（可选）
+### 端到端加密（VLESS Encryption）
+
+过 CDN 时外层 TLS 终结在 CF 边缘，CF 解密后能看到内层 VLESS 明文。纯 VLESS 自身不加密，能读到明文的不止链路上的第三方，还包括 CF 本身，以及回源段若非 Full (strict) 时 CF 与 VPS 之间的中间人。
+
+`VLESS Encryption` 在 VLESS 内层端到端认证加密，独立于外层 TLS 与公共 CA 体系，客户端预置服务端静态公钥（X25519 或 ML-KEM-768），每条连接做临时密钥交换，兼具前向保密与后量子安全；载荷走 AES-256-GCM / ChaCha20-Poly1305，即使 CF 或链路上任何人拿着有效证书 MITM 掉外层 TLS，没有服务端静态私钥也无法伪造内层握手和读取内容。
+
+执行 `xray vlessenc` 一键生成配对的 `decryption`/`encryption`，输出含 X25519 与 ML-KEM-768 两版，二选一不要混用（握手本身两者都后量子安全，ML-KEM-768 版额外能防客户端参数泄露后被未来量子计算机破解出私钥冒充服务端）
+
+配置模板：
+
+```json title="服务端"
+"settings": {
+  "users": [{ "id": "你的UUID" }],
+  "decryption": "mlkem768x25519plus.native.600s.私钥"
+}
+```
+
+```json title="客户端"
+"settings": {
+  "address": "优选 IP",
+  "port": 443,
+  "id": "你的UUID",
+  "encryption": "mlkem768x25519plus.native.0rtt.公钥"
+}
+```
+
+配置串以 `.` 分块，第一块 `mlkem768x25519plus` 为握手方式。
+
+第二块为流量外观：
+
+- `native`：头部有公钥特征，流量为 TLSv1.3 的 `23 3 3 l>>8 l` AEAD 头特征
+- `xorpub`：头部无公钥特征，流量同上
+- `random`：全随机数加密
+
+第三块服务端为 0-RTT 凭据有效期如 `600s`（可写范围 `60-600s`，`0` 则关闭 0-RTT），客户端为 `0rtt`/`1rtt`。
+
+**注意：**
+
+- 下文的 [ECH](#ech加密-sni) 加密的是 SNI，属于防探测/隐私手段，不防 MITM
+- 端到端加密是在 TLS 之上再叠一层加密，会多一份 CPU 与握手开销
+- REALITY 本身已在同一条直连链路上做了服务端认证与端到端加密，无需另外设置
+- 裸跑（`security: "none"`） 抗不住熵检测与主动探测，不要这样做
+- 只要 TLS 终结在你不完全信任的中间盒，VLESS Encryption 就有意义
+
+### ECH 加密
 
 CF 面板开启 ECH 后，客户端在 `tlsSettings` 加 `echConfigList` 即可加密 SNI。格式为 `"域名+DNS服务器"`，服务器支持 `https://`（DoH）、`h2c://`、`udp://` 三种：
 
@@ -749,6 +793,6 @@ chmod +r ~/xray_cert/xray.crt
 
 ## 注意事项
 
-- packet-up 和 `Referer` 长 padding 会刷出大量长日志，建议在反代软件里指定不记录；开启请求混淆后也可以让日志形态不再扎眼
+- packet-up 和 `Referer` 长 padding 会刷出大量长日志，建议在反代软件里指定不记录；开启请求混淆后也可让日志形态不再扎眼
 - `address` 填优选 IP 时 `serverName` 必填，且 IP 不能当 SNI，留空则无 SNI 扩展，CF 会拒
-- v26.9.8 起 REALITY 服务端强制 ClientHello 携带 X25519MLKEM768，奇怪和过时指纹会直接被当回落流量处理
+- v26.9.8 起 REALITY 服务端强制 ClientHello 携带 X25519MLKEM768，奇怪和过时的指纹会直接被当回落流量处理

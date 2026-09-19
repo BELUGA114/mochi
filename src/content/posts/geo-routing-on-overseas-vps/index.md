@@ -10,7 +10,7 @@ draft: false
 
 ## 环境与说明
 
-Xray v26.6.1，配置里的 `warp` 出站是保守侧的中转，它可以是 Cloudflare WARP 或其他出站，不重要。
+Xray-core v26.6.1，配置里的 `warp` 出站是保守侧的中转，它可以是 Cloudflare WARP 或其他出站，不重要。
 
 文中的域名数据来自 [@Loyalsoldier/v2ray-rules-dat](https://github.com/Loyalsoldier/v2ray-rules-dat) 的 `geosite.dat`，构建日期 2026-08-30。换个上游或者换个构建时间，具体条目会有出入。
 
