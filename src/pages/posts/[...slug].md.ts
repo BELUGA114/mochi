@@ -61,6 +61,10 @@ export const GET: APIRoute = ({ props, site }) => {
 	return new Response(markdown, {
 		headers: {
 			"Content-Type": "text/markdown; charset=utf-8",
+			// 与 Worker 的协商响应一致，利于缓存按 Accept 分桶
+			Vary: "Accept",
+			// 明确允许 AI/搜索抓取器索引与跟随
+			"X-Robots-Tag": "all",
 		},
 	});
 };
