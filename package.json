@@ -38,7 +38,7 @@
     "astro-icon": "^1.2.0",
     "hastscript": "^9.0.1",
     "katex": "^0.18.7",
-    "markdown-it": "^14.3.1",
+    "markdown-it": "^14.3.2",
     "mdast-util-to-string": "^4.0.0",
     "overlayscrollbars": "^2.16.0",
     "pagefind": "^1.5.2",
@@ -62,8 +62,8 @@
     "unist-util-visit": "^5.1.0"
   },
   "devDependencies": {
-    "@astrojs/ts-plugin": "^1.10.11",
-    "@biomejs/biome": "2.5.12",
+    "@astrojs/ts-plugin": "^1.10.12",
+    "@biomejs/biome": "2.5.14",
     "@rollup/plugin-yaml": "^4.1.2",
     "@types/hast": "^3.0.5",
     "@types/markdown-it": "^14.2.0",
