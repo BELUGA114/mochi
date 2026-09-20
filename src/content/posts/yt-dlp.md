@@ -1,6 +1,6 @@
 ---
 title: yt-dlp 入门笔记
-published: 2026-08-13
+published: 2026-08-10
 description: yt-dlp 的常用参数与用法速查。
 image: ""
 tags: [yt-dlp, 命令行, YouTube, 视频下载]

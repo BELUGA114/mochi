@@ -1,6 +1,6 @@
 ---
 title: XHTTP 原理、配置字段与玩法
-published: 2026-08-03
+published: 2026-08-13
 description: 对 XHTTP 官方文档和源码的研读与实践：三种模式、XMUX 与请求混淆的取舍，过 CF 与 Nginx 前置以及上下行分离、REALITY 混搭等玩法。
 image: ""
 tags: [VPS, Xray, XHTTP, REALITY, Cloudflare]
@@ -678,6 +678,33 @@ CF 面板可以再加一条 Cache Rules，按 CDN 主机名或 XHTTP path 匹配
 
 执行 `xray vlessenc` 一键生成配对的 `decryption`/`encryption`，输出含 X25519 与 ML-KEM-768 两版，二选一不要混用（握手本身两者都后量子安全，ML-KEM-768 版额外能防客户端参数泄露后被未来量子计算机破解出私钥冒充服务端）
 
+配置串以 `.` 分块:
+
+```json
+"mlkem768x25519plus.<mode>.<rtt>.<...>.(padding len).(padding gap)...(X25519 PrivateKey).(ML-KEM-768 Seed)..."
+```
+
+`mlkem768x25519plus` 为握手方式，`<mode>` 为流量外观：
+
+- `native`：头部有公钥特征，流量为 TLSv1.3 的 `23 3 3 l>>8 l` AEAD 头特征
+- `xorpub`：头部无公钥特征，流量同上
+- `random`：全随机数加密
+
+`<rtt>` 服务端为 0-RTT 有效期如 `600s`（可写范围 `60-600s`，`0` 则关闭 0-RTT），客户端为 `0rtt`/`1rtt`。
+
+Padding 是可选的参数，仅作用于 1-RTT 以消除握手的长度特征，双端默认值均为 "100-111-1111.75-0-111.50-0-3333"：
+
+1. 在 1-RTT client/server hello 后以 100% 的概率粘上随机 111 到 1111 字节的 padding
+2. 以 75% 的概率等待随机 0 到 111 毫秒（"probability-from-to"）
+3. 再次以 50% 的概率发送随机 0 到 3333 字节的 padding（若为 0 则不 Write()）
+
+服务端、客户端可以设置不同的 padding 参数，按 len、gap 的顺序无限串联，第一个 padding 需概率 100%、至少 35 字节
+
+```go title="common.go"
+paddingLens = [][3]int{{100, 111, 1111}, {50, 0, 3333}}
+paddingGaps = [][3]int{{75, 0, 111}}
+```
+
 配置模板：
 
 ```json title="服务端"
@@ -696,16 +723,6 @@ CF 面板可以再加一条 Cache Rules，按 CDN 主机名或 XHTTP path 匹配
 }
 ```
 
-配置串以 `.` 分块，第一块 `mlkem768x25519plus` 为握手方式。
-
-第二块为流量外观：
-
-- `native`：头部有公钥特征，流量为 TLSv1.3 的 `23 3 3 l>>8 l` AEAD 头特征
-- `xorpub`：头部无公钥特征，流量同上
-- `random`：全随机数加密
-
-第三块服务端为 0-RTT 凭据有效期如 `600s`（可写范围 `60-600s`，`0` 则关闭 0-RTT），客户端为 `0rtt`/`1rtt`。
-
 **注意：**
 
 - 下文的 [ECH](#ech加密-sni) 加密的是 SNI，属于防探测/隐私手段，不防 MITM
@@ -722,7 +739,7 @@ CF 面板开启 ECH 后，客户端在 `tlsSettings` 加 `echConfigList` 即可�
 "tlsSettings": {
   "serverName": "cf1.domain.com",
   "alpn": ["h2"],
-  "echConfigList": "cf1.domain.com+udp://223.5.5.5:53"
+  "echConfigList": "cf1.domain.com+udp://1.1.1.1:53"
 }
 ```
 

@@ -94,7 +94,7 @@ Claude Code 在后台子代理回报时，会注入 `<task-notification>` 这类
 ```json title="~/.claude/settings.json"
 {
   "env": {
-    "NTFY_THRESHOLD_MS": "600000"   // 10分钟阈值
+    "NTFY_THRESHOLD_MS": "600000" // 10分钟阈值
   },
   "hooks": {
     "UserPromptSubmit": [
