@@ -1,6 +1,6 @@
 ---
 title: 让 Claude Code 长任务结束后通知用户
-published: 2026-09-20
+published: 2026-08-21
 description: 用 hooks 和 ntfy.sh 让 Claude Code 在长任务结束后向手机推送通知。
 image: ""
 tags: [Claude Code, hooks, ntfy]
@@ -32,16 +32,16 @@ Claude Code 提供两个关键钩子：
 
 1. `UserPromptSubmit` 记下任务开始时刻（`mark`）
 2. `Stop` 时把这一轮的耗时累加进一个状态文件（`notify`）
-3. **累计活跃时间**达到阈值后，派生一个独立的 `settle` 进程，进入一个「静默窗口」继续观察
+3. **累计活跃时间**达到阈值后，派生一个独立的 `settle` 进程，进入一个静默窗口继续观察
 4. 静默窗口内如果没有新的动静，判定任务结束，推送并清零；如果又有动静，窗口作废、重新等
 
 状态存在临时目录下、以 `session_id` 命名的 JSON 文件里，`mark`/`notify`/`settle` 三个进程通过它协作。
 
 ### 合成消息不能算作「用户又输入了」
 
-Claude Code 在后台子代理回报时，会注入 `<task-notification>` 这类**合成消息**，而它们走的是和真实用户输入一样的 `UserPromptSubmit` 通道。
+Claude Code 在后台子代理回报时，会注入 `<task-notification>` 这类合成消息，而它们走的是和真实用户输入一样的 `UserPromptSubmit` 通道。
 
-如果计时逻辑把它们当成真实指令，子代理编排型的长任务每收到一次后台回报就被清零一次，**永远攒不够阈值**。最后表现是 5 分钟的单会话小任务有提醒，一个多小时的子代理编排型大任务反而没提醒。
+如果计时逻辑把它们当成真实指令，子代理编排型的长任务每收到一次后台回报就被清零一次，永远攒不够阈值。最后表现是 5 分钟的单会话小任务有提醒，一个多小时的子代理编排型大任务反而没提醒。
 
 所以计时钩子必须识别合成注入，优先看 hook 输入的 `prompt` 字段是不是以这些标记开头，为空时退回扫原始 stdin：
 
@@ -62,8 +62,8 @@ Claude Code 在后台子代理回报时，会注入 `<task-notification>` 这类
 
 判据来自 `Stop` 的 stdin 字段，取两路信号的并集：
 
-- **`background_tasks`**：检测实时后台任务清单（元素形如 `{id, type, status, description, command}`），如果 `status` 不在「已结束」的集合（`completed`/`failed`/`cancelled`/…）里就算有子代理在运行
-- **`transcript_path`**：扫描 transcript 作为兜底，对「已通过 `async_launched` 发起、但还没收到对应 `<task-id>` + `<status>completed` 回报」的子代理进行计数（按任务开始时间过滤，不把上一个任务的残留算进来）
+- **`background_tasks`**：检测实时后台任务清单（元素形如 `{id, type, status, description, command}`），如果 `status` 不在已结束的集合（`completed`/`failed`/`cancelled`/…）中就算有子代理在运行
+- **`transcript_path`**：扫描 transcript 作为兜底，对已通过 `async_launched` 发起、但还没收到对应 `<task-id>` + `<status>completed` 回报的子代理进行计数（按任务开始时间过滤，不把上一个任务的残留算进来）
 
 :::note
 `Stop` 的 stdin 实测带这些字段：`session_id`、`transcript_path`、`cwd`、`stop_hook_active`、`background_tasks`、`last_assistant_message`。`session_id` 就是用作状态文件名的那个外层 session id。
@@ -82,7 +82,7 @@ Claude Code 在后台子代理回报时，会注入 `<task-notification>` 这类
 | `NTFY_DRY_RUN`              | 未设             | `=1` 走完整流程但不真推送（测试用）                          |
 | `NTFY_DEBUG`                | 未设             | `=1` 把决策过程写进临时目录的 `claude-ntfy.log`              |
 
-`NTFY_THRESHOLD_MS` 判定的是**累计活跃时间**，而非纯墙钟，`accMs` 在每次 `Stop` 累加「距上一个锚点的时长」：
+`NTFY_THRESHOLD_MS` 判定的是**累计活跃时间**，而非纯墙钟，`accMs` 在每次 `Stop` 累加距上一个锚点的时长：
 
 - **子代理编排型任务**：主循环等子代理的墙钟也会累计进去，所以这类任务的 `accMs` 基本等于任务开始到现在的总时长
 - **单会话任务**：你思考、离开的间隔（只要不超过 `IDLE_RESET_MS`）同样算进活跃时间，它衡量的是任务窗口内累计流逝的时间
@@ -91,7 +91,7 @@ Claude Code 在后台子代理回报时，会注入 `<task-notification>` 这类
 
 `settings.json` 里挂两个钩子：
 
-```json title="settings.json"
+```json title="~/.claude/settings.json"
 {
   "env": {
     "NTFY_THRESHOLD_MS": "600000"   // 10分钟阈值
@@ -131,8 +131,6 @@ Claude Code 在后台子代理回报时，会注入 `<task-notification>` 这类
 ## 完整实现
 
 由 Claude 自行编写并验证，主题名和服务地址（`NTFY_TOPIC`、`NTFY_URL`）硬编码在脚本里。
-
-
 
 ```js title="~/.claude/hooks/ntfy-notify.js"
 #!/usr/bin/env node
@@ -499,5 +497,5 @@ main().catch((err) => logError("main", err));
 - **`settle` 用 `detached + unref` 派生**，不跑在钩子进程里。钩子有超时、会被回收
 - **`token` 机制**：每次启动 `settle` 生成一个新 token 写进状态；`settle` 醒来后比对 token，对不上就说明期间有新动静把它顶掉了，直接退出。这样多个 `settle` 竞争时只有最新的那个会真正推送
 - **状态文件先写临时文件再 rename**：`mark`/`notify`/`settle` 三个进程可能同时读改写，原子替换避免读到半截 JSON
-- **推送失败不清零**：`accMs` 保留，下一次 `Stop` 会重新派生 `settle` 再试，一次网络抖动不至于永久丢掉这次通知
-- **可接受的边界**：如果某个子代理被强杀、从此不再回报，而 `background_tasks` 也不列它，兜底会一直认为它「在跑」而压制这次通知。但这会在你下一条真实指令时自愈（两条真实指令间隔超过 `IDLE_RESET_MS` 会清零重来）
+- **推送失败不清零**：`accMs` 保留，下一次 `Stop` 会重新派生 `settle` 再试，网络抖动不会永久丢掉通知
+- **可接受的边界**：如果某个子代理被强杀、从此不再回报，`background_tasks` 会一直认为它在运行而压制这次通知。但这会在你下一条真实指令时自愈（两条真实指令间隔超过 `IDLE_RESET_MS`）

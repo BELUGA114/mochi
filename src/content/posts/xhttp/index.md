@@ -440,11 +440,11 @@ location /yourpath {
 
 先分清三个地址字段，一次 XHTTP over CDN 的请求里它们互相独立：
 
-| 字段                     | 是什么                                | 谁看得见                    | 决定什么                        |
+| 字段                     | 是什么                                | 谁能看见                    | 决定什么                        |
 | ------------------------ | ------------------------------------- | --------------------------- | ------------------------------- |
 | `address`                | 实际拨号目标                          | 链路上所有人                | 包发到哪个 IP（优选 IP 填这里） |
-| `tlsSettings.serverName` | TLS ClientHello 的 SNI                | 明文，GFW 和 CDN 都看得见   | CDN 用哪张证书握手              |
-| `xhttpSettings.host`     | HTTP Host 头（H2/H3 为 `:authority`） | TLS 加密内，只有 CDN 看得见 | CDN 回源到哪台机器              |
+| `tlsSettings.serverName` | TLS ClientHello 的 SNI                | 明文，每个人都能看见        | CDN 用哪张证书握手              |
+| `xhttpSettings.host`     | HTTP Host 头（H2/H3 为 `:authority`） | TLS 加密内，只有 CDN 能看见 | CDN 回源到哪台机器              |
 
 SNI 与 Host 不一致即域前置；两者是同一 zone 内不同子域即同域域前置。跨 zone 的域前置 CF 已封，同 zone 内没有问题。
 
@@ -674,7 +674,7 @@ CF 面板可以再加一条 Cache Rules，按 CDN 主机名或 XHTTP path 匹配
 
 过 CDN 时外层 TLS 终结在 CF 边缘，CF 解密后能看到内层 VLESS 明文。纯 VLESS 自身不加密，能读到明文的不止链路上的第三方，还包括 CF 本身，以及回源段若非 Full (strict) 时 CF 与 VPS 之间的中间人。
 
-`VLESS Encryption` 在 VLESS 内层端到端认证加密，独立于外层 TLS 与公共 CA 体系，客户端预置服务端静态公钥（X25519 或 ML-KEM-768），每条连接做临时密钥交换，兼具前向保密与后量子安全；载荷走 AES-256-GCM / ChaCha20-Poly1305，即使 CF 或链路上任何人拿着有效证书 MITM 掉外层 TLS，没有服务端静态私钥也无法伪造内层握手和读取内容。
+`VLESS Encryption` 在 VLESS 内层端到端认证加密，独立于外层 TLS 与公共 CA 体系，客户端预置服务端静态公钥（X25519 或 ML-KEM-768），每条连接做临时密钥交换，兼具前向安全与后量子安全；载荷走 AES-256-GCM / ChaCha20-Poly1305，即使 CF 或链路上任何人拿着有效证书 MITM 掉外层 TLS，没有服务端静态私钥也无法伪造内层握手和读取内容。
 
 执行 `xray vlessenc` 一键生成配对的 `decryption`/`encryption`，输出含 X25519 与 ML-KEM-768 两版，二选一不要混用（握手本身两者都后量子安全，ML-KEM-768 版额外能防客户端参数泄露后被未来量子计算机破解出私钥冒充服务端）
 
