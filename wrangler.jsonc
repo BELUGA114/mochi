@@ -7,8 +7,12 @@
 		// 自定义域名，要求 cobweb11.top 这个 zone 在同一个 Cloudflare 账户下
 		{ "pattern": "blog.cobweb11.top", "custom_domain": true }
 	],
+	"main": "worker/index.ts",
 	"assets": {
-		// 纯静态站点：只上传 astro build + pagefind 的产物，不需要 main 入口
-		"directory": "./dist"
+		// 纯静态站点产物；Worker 通过 ASSETS binding 改道到其中的 .md 文件
+		"directory": "./dist",
+		"binding": "ASSETS",
+		// 只让 Worker 抢先处理文章路径，其余路径仍走默认的资产优先
+		"run_worker_first": ["/posts/*"]
 	}
 }
