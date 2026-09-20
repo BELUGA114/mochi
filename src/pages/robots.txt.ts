@@ -5,6 +5,7 @@ User-agent: *
 Disallow: /_astro/
 
 Sitemap: ${new URL("sitemap-index.xml", import.meta.env.SITE).href}
+# llms.txt: ${new URL("llms.txt", import.meta.env.SITE).href}
 `.trim();
 
 export const GET: APIRoute = () => {
