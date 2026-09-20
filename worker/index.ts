@@ -12,8 +12,20 @@ interface Env {
 // 不匹配已带扩展名的 /posts/<slug>.md 本身。
 const POST_PAGE = /^\/posts\/(.+)\/$/;
 
+// 子串匹配是刻意的简化：面向 AI 爬虫场景，不解析 q 值权重，命中即认为要 markdown。
 function wantsMarkdown(accept: string | null): boolean {
 	return accept != null && accept.toLowerCase().includes("text/markdown");
+}
+
+// 给协商 URL 的每一种表示都打上 Vary: Accept，避免共享缓存串味。
+function withVary(response: Response): Response {
+	const headers = new Headers(response.headers);
+	headers.set("Vary", "Accept");
+	return new Response(response.body, {
+		status: response.status,
+		statusText: response.statusText,
+		headers,
+	});
 }
 
 export default {
@@ -21,28 +33,26 @@ export default {
 		const url = new URL(request.url);
 		const match = POST_PAGE.exec(url.pathname);
 
-		if (
-			request.method === "GET" &&
-			match &&
-			wantsMarkdown(request.headers.get("Accept"))
-		) {
+		// 非文章页 / 非 GET：完全透传，不加任何头。
+		if (request.method !== "GET" || !match) {
+			return env.ASSETS.fetch(request);
+		}
+
+		if (wantsMarkdown(request.headers.get("Accept"))) {
 			// /posts/<slug>/ -> /posts/<slug>.md
 			const mdUrl = new URL(request.url);
 			mdUrl.pathname = `/posts/${match[1]}.md`;
 			const mdResponse = await env.ASSETS.fetch(
 				new Request(mdUrl.toString(), { headers: request.headers }),
 			);
-			if (mdResponse.ok) {
-				const headers = new Headers(mdResponse.headers);
-				headers.set("Vary", "Accept");
-				return new Response(mdResponse.body, {
-					status: mdResponse.status,
-					headers,
-				});
+			// 304 也算命中（条件请求的正常结果），只有真正取不到才回退 HTML。
+			if (mdResponse.ok || mdResponse.status === 304) {
+				return withVary(mdResponse);
 			}
 			// 理论不该发生（每篇文章都产出 .md）：回退到原 HTML。
 		}
 
-		return env.ASSETS.fetch(request);
+		// 文章页的 HTML 表示也要带 Vary: Accept。
+		return withVary(await env.ASSETS.fetch(request));
 	},
 };
