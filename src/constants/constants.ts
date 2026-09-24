@@ -5,6 +5,11 @@ export const LIGHT_MODE = "light",
 	AUTO_MODE = "auto";
 export const DEFAULT_THEME = AUTO_MODE;
 
+export const MOTION_AUTO = "auto",
+	MOTION_REDUCE = "reduce",
+	MOTION_FULL = "full";
+export const DEFAULT_MOTION = MOTION_AUTO;
+
 // Banner height unit: vh
 export const BANNER_HEIGHT = 35;
 export const BANNER_HEIGHT_EXTEND = 30;

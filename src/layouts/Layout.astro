@@ -11,8 +11,11 @@ import {
 	BANNER_HEIGHT_EXTEND,
 	BANNER_HEIGHT_HOME,
 	DARK_MODE,
+	DEFAULT_MOTION,
 	DEFAULT_THEME,
 	LIGHT_MODE,
+	MOTION_AUTO,
+	MOTION_REDUCE,
 	PAGE_WIDTH,
 	WALLPAPER_CARD_OPACITY_DEFAULT,
 } from "../constants/constants";
@@ -141,7 +144,7 @@ const bannerOffset =
 		))}
 
 		<!-- Set the theme before the page is rendered to avoid a flash -->
-		<script is:inline define:vars={{DEFAULT_THEME, LIGHT_MODE, DARK_MODE, AUTO_MODE, BANNER_HEIGHT_EXTEND, PAGE_WIDTH, configHue}}>
+		<script is:inline define:vars={{DEFAULT_THEME, LIGHT_MODE, DARK_MODE, AUTO_MODE, DEFAULT_MOTION, MOTION_AUTO, MOTION_REDUCE, BANNER_HEIGHT_EXTEND, PAGE_WIDTH, configHue}}>
 			// Load the theme from local storage
 			const theme = localStorage.getItem('theme') || DEFAULT_THEME;
 			switch (theme) {
@@ -167,6 +170,14 @@ const bannerOffset =
 			let offset = Math.floor(window.innerHeight * (BANNER_HEIGHT_EXTEND / 100));
 			offset = offset - offset % 4;
 			document.documentElement.style.setProperty('--banner-height-extend', `${offset}px`);
+
+			// 首帧前套用动画偏好：减弱访客不该先看到入场动画播一次再被 JS 补上 class
+			const motionPref = localStorage.getItem('motion') || DEFAULT_MOTION;
+			const reduceMotion = motionPref === MOTION_REDUCE
+				|| (motionPref === MOTION_AUTO && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+			if (reduceMotion) {
+				document.documentElement.classList.add('reduce-motion');
+			}
 		</script>
 		<style define:vars={{
 			configHue,
@@ -339,7 +350,7 @@ import {
 	// SizeObserverPlugin,
 	// ClickScrollPlugin
 } from 'overlayscrollbars';
-import {getHue, getStoredTheme, setHue, setTheme} from "../utils/setting-utils";
+import {applyMotionToDocument, getHue, getStoredMotion, getStoredTheme, setHue, setTheme} from "../utils/setting-utils";
 import {pathsEqual, url} from "../utils/url-utils";
 import {
 	BANNER_HEIGHT,
@@ -423,6 +434,10 @@ function loadHue() {
 	setHue(getHue())
 }
 
+function loadMotion() {
+	applyMotionToDocument(getStoredMotion())
+}
+
 function initCustomScrollbar() {
 	const bodyElement = document.querySelector('body');
 	if (!bodyElement) return;
@@ -504,12 +519,18 @@ function init() {
 	// disableAnimation()()		// TODO
 	loadTheme();
 	loadHue();
+	loadMotion();
 	initCustomScrollbar();
 	showBanner();
 }
 
 /* Load settings when entering the site */
 init();
+
+/* auto 档下系统偏好实时生效；reduce/full 档 applyMotionToDocument 会忽略系统值，重复应用同值无副作用 */
+window.matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', () => {
+	applyMotionToDocument(getStoredMotion())
+})
 
 /* ---- FLIP：文章页"补位"动画（Chrome 卡顿修复）----
    进出文章页时，:has() 驱动的布局（页宽/列宽/侧栏负 margin）瞬切到终态（transition.css 已移除
@@ -522,6 +543,10 @@ const FLIP_MIN_WIDTH_QUERY = '(min-width: 75rem)'
 let flipOldArticleLeft: number | null = null
 let flipOldSidebarLeft: number | null = null
 let flipAnimations: Animation[] = []
+
+function prefersReducedMotion() {
+	return document.documentElement.classList.contains('reduce-motion')
+}
 
 /* ---- O2：顶栏"伪收窄"FLIP ----
    O1（真实 max-width 过渡 + 窗口内摘玻璃）实测仍有顿挫——真宽度动画的 sticky/布局逐帧
@@ -543,6 +568,10 @@ function flipNavbarGroup(el: HTMLElement, oldLeft: number, newLeft: number) {
 }
 
 function startNavbarFlip() {
+	if (prefersReducedMotion()) {
+		flipOldNavbarWidth = null
+		return
+	}
 	if (!window.matchMedia(FLIP_MIN_WIDTH_QUERY).matches) {
 		flipOldNavbarWidth = null
 		return
@@ -593,6 +622,12 @@ function flipElement(el: HTMLElement, oldLeft: number, currentRect: DOMRect) {
 }
 
 function startFlip() {
+	if (prefersReducedMotion()) {
+		// 布局已瞬切到位；不播平移动画即为减弱态的正确行为。清掉暂存的旧位置
+		flipOldArticleLeft = null
+		flipOldSidebarLeft = null
+		return
+	}
 	if (!window.matchMedia(FLIP_MIN_WIDTH_QUERY).matches) return
 	const article = document.getElementById('swup-container')
 	const sidebar = document.getElementById('sidebar')

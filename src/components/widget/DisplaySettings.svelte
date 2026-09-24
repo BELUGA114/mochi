@@ -1,14 +1,30 @@
 <script lang="ts">
+import { MOTION_AUTO, MOTION_FULL, MOTION_REDUCE } from "@constants/constants";
 import I18nKey from "@i18n/i18nKey";
 import { i18n } from "@i18n/translation";
 import Icon from "@iconify/svelte";
-import { getDefaultHue, getHue, setHue } from "@utils/setting-utils";
+import {
+	getDefaultHue,
+	getHue,
+	getStoredMotion,
+	setHue,
+	setMotion,
+} from "@utils/setting-utils";
+import type { MOTION_MODE } from "@/types/config";
+
+export let showHue = true;
 
 let hue = getHue();
 const defaultHue = getDefaultHue();
+let motion: MOTION_MODE = getStoredMotion();
 
 function resetHue() {
 	hue = getDefaultHue();
+}
+
+function selectMotion(mode: MOTION_MODE) {
+	motion = mode;
+	setMotion(mode);
 }
 
 $: if (hue || hue === 0) {
@@ -17,6 +33,7 @@ $: if (hue || hue === 0) {
 </script>
 
 <div id="display-setting" class="float-panel float-panel-closed absolute transition-all w-80 right-4 px-4 py-4">
+    {#if showHue}
     <div class="flex flex-row gap-2 mb-3 items-center justify-between">
         <div class="flex gap-2 font-bold text-lg text-neutral-900 dark:text-neutral-100 transition relative ml-3
             before:w-1 before:h-4 before:rounded-md before:bg-[var(--primary)]
@@ -40,6 +57,30 @@ $: if (hue || hue === 0) {
     <div class="w-full h-6 px-1 bg-[oklch(0.80_0.10_0)] dark:bg-[oklch(0.70_0.10_0)] rounded select-none">
         <input aria-label={i18n(I18nKey.themeColor)} type="range" min="0" max="360" bind:value={hue}
                class="slider" id="colorSlider" step="5" style="width: 100%">
+    </div>
+    {/if}
+
+    <div class:mt-4={showHue}>
+        <div class="flex gap-2 mb-3 font-bold text-lg text-neutral-900 dark:text-neutral-100 transition relative ml-3
+            before:w-1 before:h-4 before:rounded-md before:bg-[var(--primary)]
+            before:absolute before:-left-3 before:top-[0.33rem]"
+        >
+            {i18n(I18nKey.motion)}
+        </div>
+        <div class="flex gap-1">
+            <button class="flex-1 flex justify-center items-center btn-plain scale-animation rounded-lg h-9 px-2 text-sm font-medium active:scale-95"
+                    class:current-theme-btn={motion === MOTION_AUTO} aria-pressed={motion === MOTION_AUTO} on:click={() => selectMotion(MOTION_AUTO)}>
+                {i18n(I18nKey.systemMode)}
+            </button>
+            <button class="flex-1 flex justify-center items-center btn-plain scale-animation rounded-lg h-9 px-2 text-sm font-medium active:scale-95"
+                    class:current-theme-btn={motion === MOTION_REDUCE} aria-pressed={motion === MOTION_REDUCE} on:click={() => selectMotion(MOTION_REDUCE)}>
+                {i18n(I18nKey.reduceMotion)}
+            </button>
+            <button class="flex-1 flex justify-center items-center btn-plain scale-animation rounded-lg h-9 px-2 text-sm font-medium active:scale-95"
+                    class:current-theme-btn={motion === MOTION_FULL} aria-pressed={motion === MOTION_FULL} on:click={() => selectMotion(MOTION_FULL)}>
+                {i18n(I18nKey.fullMotion)}
+            </button>
+        </div>
     </div>
 </div>
 

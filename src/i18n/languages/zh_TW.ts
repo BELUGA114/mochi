@@ -30,6 +30,10 @@ export const zh_TW: Translation = {
 	[Key.darkMode]: "暗色",
 	[Key.systemMode]: "跟隨系統",
 
+	[Key.motion]: "動畫",
+	[Key.reduceMotion]: "減弱",
+	[Key.fullMotion]: "完整",
+
 	[Key.more]: "更多",
 
 	[Key.author]: "作者",

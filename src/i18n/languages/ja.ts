@@ -30,6 +30,10 @@ export const ja: Translation = {
 	[Key.darkMode]: "ダーク",
 	[Key.systemMode]: "システム",
 
+	[Key.motion]: "アニメーション",
+	[Key.reduceMotion]: "低減",
+	[Key.fullMotion]: "フル",
+
 	[Key.more]: "もっと",
 
 	[Key.author]: "作者",

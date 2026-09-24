@@ -1,11 +1,14 @@
 import {
 	AUTO_MODE,
 	DARK_MODE,
+	DEFAULT_MOTION,
 	DEFAULT_THEME,
 	LIGHT_MODE,
+	MOTION_AUTO,
+	MOTION_REDUCE,
 } from "@constants/constants.ts";
 import { expressiveCodeConfig } from "@/config";
-import type { LIGHT_DARK_MODE } from "@/types/config";
+import type { LIGHT_DARK_MODE, MOTION_MODE } from "@/types/config";
 
 export function getDefaultHue(): number {
 	const fallback = "250";
@@ -58,4 +61,22 @@ export function setTheme(theme: LIGHT_DARK_MODE): void {
 
 export function getStoredTheme(): LIGHT_DARK_MODE {
 	return (localStorage.getItem("theme") as LIGHT_DARK_MODE) || DEFAULT_THEME;
+}
+
+export function getStoredMotion(): MOTION_MODE {
+	return (localStorage.getItem("motion") as MOTION_MODE) || DEFAULT_MOTION;
+}
+
+export function applyMotionToDocument(mode: MOTION_MODE): void {
+	// auto 档才看系统偏好;reduce/full 显式覆盖。结果只落成 <html>.reduce-motion 单一 class
+	const reduce =
+		mode === MOTION_REDUCE ||
+		(mode === MOTION_AUTO &&
+			window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+	document.documentElement.classList.toggle("reduce-motion", reduce);
+}
+
+export function setMotion(mode: MOTION_MODE): void {
+	localStorage.setItem("motion", mode);
+	applyMotionToDocument(mode);
 }

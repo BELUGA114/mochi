@@ -122,3 +122,23 @@ body:has(#post-container) #toc-panel {
    绝对定位铺满、-z-10 垫底）是关键：变宽度的盒子不再是 backdrop-filter 载体，
    其采样区在面板局部坐标系里恒定，不随布局逐帧失效 */
 
+/* ---- 减弱动画偏好（html.reduce-motion 为单一真源；解析见 setting-utils / Layout.astro）----
+   入场动画整段关掉：元素直接显示，零 opacity 动画，彻底不触碰本目录 CLAUDE.md 记录的
+   "动画填充态成为 backdrop root 破坏 Chrome 毛玻璃"陷阱。
+   换页保留 opacity 交叉淡入、去掉纵向位移（交叉淡入不属于"运动"，符合 reduced-motion 规范）。
+   FLIP 正文/侧栏平移与顶栏 O2 由 Layout.astro 的脚本按同一 class 跳过。
+   选择器带两个 html 上的 class（.reduce-motion.is-animating），特异性高于原 .is-animating 规则，稳压 */
+html.reduce-motion .onload-animation {
+    animation: none;
+}
+html.reduce-motion.is-animating .transition-swup-fade {
+    @apply translate-y-0;
+}
+/* ≥96rem 下 #toc-panel 从 75rem 收窄到 56rem 时（mx-auto），其右缘锚定的 TOC 导轨会横移约 9.5rem，
+   且由 markup 的 transition-all duration-700 驱动——这是减弱态下唯一未瞬切的布局位移。
+   只保留 opacity 过渡（壁纸沉浸模式的淡出依赖 #toc-panel 的 duration-700），把 max-width/布局收窄改成瞬切。
+   无条件生效、不 gate :has(#post-container)：否则离开文章页方向的 56→75rem 回弹仍会走 700ms */
+html.reduce-motion #toc-panel {
+    transition-property: opacity;
+}
+

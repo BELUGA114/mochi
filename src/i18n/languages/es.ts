@@ -30,6 +30,10 @@ export const es: Translation = {
 	[Key.darkMode]: "Oscuro",
 	[Key.systemMode]: "Sistema",
 
+	[Key.motion]: "Animación",
+	[Key.reduceMotion]: "Reducida",
+	[Key.fullMotion]: "Completa",
+
 	[Key.more]: "Más",
 
 	[Key.author]: "Autor",

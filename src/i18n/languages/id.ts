@@ -30,6 +30,10 @@ export const id: Translation = {
 	[Key.darkMode]: "Gelap",
 	[Key.systemMode]: "Sistem",
 
+	[Key.motion]: "Animasi",
+	[Key.reduceMotion]: "Dikurangi",
+	[Key.fullMotion]: "Penuh",
+
 	[Key.more]: "Lainnya",
 
 	[Key.author]: "Penulis",

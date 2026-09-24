@@ -30,6 +30,10 @@ export const tr: Translation = {
 	[Key.darkMode]: "Koyu",
 	[Key.systemMode]: "Sistem",
 
+	[Key.motion]: "Animasyon",
+	[Key.reduceMotion]: "Azaltılmış",
+	[Key.fullMotion]: "Tam",
+
 	[Key.more]: "Daha Fazla",
 
 	[Key.author]: "Yazar",

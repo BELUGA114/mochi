@@ -27,6 +27,10 @@ enum I18nKey {
 	darkMode = "darkMode",
 	systemMode = "systemMode",
 
+	motion = "motion",
+	reduceMotion = "reduceMotion",
+	fullMotion = "fullMotion",
+
 	more = "more",
 
 	author = "author",
