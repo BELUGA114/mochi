@@ -405,6 +405,7 @@ location /yourpath {
 关于 `downloadSettings`：
 
 - 是一套完整的 `streamSettings` 外加 `address`/`port`，`method` 必须为 `"xhttp"`（不可省略），`security` 可为 `"tls"` 或 `"reality"`
+- 下行的 `xhttpSettings` 里也可写 `extra`（即 `downloadSettings.xhttpSettings.extra`），与上行的 `extra` 完全一致，[XMUX](#xmux) 和[请求混淆](#请求混淆)两节介绍的字段与规则全部适用
 - 下行配置不继承上行的任何配置；连 XMUX 默认值 roll 出的具体数都是各自独立随机的，随时间推移上下行复用完全不对称
 - `sockopt` 项也可被分享，但上行 `sockopt` 设 `"penetrate": true` 可覆盖下行，适合打 `mark` 的情况
 
