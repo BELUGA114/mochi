@@ -133,7 +133,7 @@ padding 默认放在 `Referer: /yourpath?x_padding=XXXX...`，这些在 CDN、�
 
 示例为 packet-up 模式，覆盖 `extra` 可用的全部字段，可按需更改或删掉走默认：
 
-```json title="客户端"
+```json
 "xhttpSettings": {
   "path": "/yourpath",
   "extra": {
@@ -205,7 +205,7 @@ XTLS/Vision 只在 TCP+TLS/REALITY 下可用：
 
 ### 基线：XHTTP + REALITY 直连
 
-```json title="服务端"
+```json
 {
   "inbounds": [
     {
@@ -233,7 +233,7 @@ XTLS/Vision 只在 TCP+TLS/REALITY 下可用：
 }
 ```
 
-```json title="客户端"
+```json
 {
   "inbounds": [
     {
@@ -275,7 +275,7 @@ XTLS/Vision 只在 TCP+TLS/REALITY 下可用：
 
 前提：cf1.domain.com 开橙云、CF 面板 SSL 模式为 Full (strict)，服务端持证书。
 
-```json title="服务端"
+```json
 "streamSettings": {
   "method": "xhttp",
   "xhttpSettings": { "path": "/yourpath" },
@@ -294,7 +294,7 @@ XTLS/Vision 只在 TCP+TLS/REALITY 下可用：
 
 客户端 H2 版，`address` 填优选 IP，`serverName` 填域名：
 
-```json title="客户端"
+```json
 {
   "settings": {
     "address": "优选 IP",
@@ -313,13 +313,13 @@ XTLS/Vision 只在 TCP+TLS/REALITY 下可用：
 
 H3 版只改一处 `alpn`：
 
-```json title="客户端"
+```json
 "tlsSettings": { "serverName": "cf1.domain.com", "alpn": ["h3"], "fingerprint": "chrome" }
 ```
 
 H2 且要流式上行时显式指定 `mode`（需 CF 面板开 gRPC 支持）：
 
-```json title="客户端"
+```json
 "xhttpSettings": {
   "path": "/yourpath",
   "mode": "stream-up"   // 或 stream-one
@@ -330,7 +330,7 @@ H2 且要流式上行时显式指定 `mode`（需 CF 面板开 gRPC 支持）：
 
 若 CDN 对请求体大小敏感，可调分包节奏：
 
-```json title="客户端"
+```json
 "xhttpSettings": {
   "path": "/yourpath",
   "extra": {
@@ -378,7 +378,7 @@ server {
 
 Xray 入站：
 
-```json title="服务端"
+```json
 {
   "listen": "127.0.0.1",
   "port": 1234,
@@ -430,7 +430,7 @@ Caddy 默认开启 H3，`reverse_proxy` 到同一个入站即可。
 
 不想让源站域名直接开橙云回源，可以用一段 Worker（或更轻量的 Snippet）把请求改写到后端域名再转发，客户端连的是 Worker 路由绑定的域名：
 
-```js title="Cloudflare Worker"
+```js
 export default {
   async fetch(request) {
     const url = new URL(request.url);
@@ -455,7 +455,7 @@ CF 面板里给 Worker 绑一条 `front.domain.com/yourpath*` 路由，客户端
 
 只改客户端：
 
-```json title="客户端"
+```json
 "streamSettings": {
   "method": "xhttp",
   "security": "tls",
@@ -479,11 +479,11 @@ CF 面板里给 Worker 绑一条 `front.domain.com/yourpath*` 路由，客户端
 
 客户端随机生成 UUID，上行 `POST /yourpath/UUID` 走 IPv4 的 TCP+TLS+H2 到边缘 IP-A，下行 `GET /yourpath/UUID` 走 IPv6 的 QUIC H3 到边缘 IP-B。两个方向的源 IP、目标 IP、四层协议、HTTP 版本全不同。服务端按 path 中的 UUID 把两半缝合，30 秒内没缝上就终止会话，基于单条连接的检测只能看到半条流。
 
-#### 上行下行各挂一个 CDN
+#### 上行下行不同 CDN
 
-上行和下行套两家不同的 CDN，或者一个套 CDN、一个直连。例如上行走 CF 的 cf1，下行走另一家 CDN：
+上行和下行套两家不同的 CDN，或者一个套 CDN、一个直连。例如上行套 CF，下行套另一家 CDN：
 
-```json title="客户端"
+```json
 "streamSettings": {
   "method": "xhttp",
   "security": "tls",
@@ -505,23 +505,23 @@ CF 面板里给 Worker 绑一条 `front.domain.com/yourpath*` 路由，客户端
 }
 ```
 
-两家 CDN 都要回源到同一台 VPS 的同一个 XHTTP 入站、`path` 一致，服务端按 UUID 缝合。此时两个方向不只是 IP 和协议不同，连所属的 CDN 基础设施都分开了，任何一方手里都只有半条流。
+两家 CDN 都要回源到同一台 VPS 的同一个 XHTTP 入站、`path` 一致，服务端按 UUID 缝合。两个方向所属的 CDN 基础设施不同，任何一方手里都只有半条流。
 
 #### 同域域前置
 
-先分清三个地址字段，一次 XHTTP over CDN 的请求里它们互相独立：
+三个地址字段在一次 XHTTP over CDN 的请求里互相独立：
 
-| 字段                       | 是什么                                 | 谁能看见                    | 决定什么                        |
-| -------------------------- | -------------------------------------- | --------------------------- | ------------------------------- |
-| `address`                | 实际拨号目标                           | 链路上所有人                | 包发到哪个 IP（优选 IP 填这里） |
-| `tlsSettings.serverName` | TLS ClientHello 的 SNI                 | 明文，每个人都能看见        | CDN 用哪张证书握手              |
-| `xhttpSettings.host`     | HTTP Host 头（H2/H3 为`:authority`） | TLS 加密内，只有 CDN 能看见 | CDN 回源到哪台机器              |
+| 字段                       | 是什么                                 | 谁能看见                    | 决定什么           |
+| -------------------------- | -------------------------------------- | --------------------------- | ------------------ |
+| `address`                | 实际拨号目标                           | 链路上所有人                | 包发到哪个 IP      |
+| `tlsSettings.serverName` | TLS ClientHello 的 SNI                 | 链路上所有人，可用 ECH 加密 | CDN 用哪张证书握手 |
+| `xhttpSettings.host`     | HTTP Host 头（H2/H3 为`:authority`） | TLS 加密，只有 CDN 能看见   | CDN 回源到哪台机器 |
 
 SNI 与 Host 不一致即域前置；两者是同一 zone 内不同子域即同域域前置。跨 zone 的域前置 CF 已封，同 zone 内没有问题。
 
 以 cf1 为上行门面、cf2 为下行门面、cf3 为共同 Host，三个均橙云、指向同一 VPS：
 
-```json title="客户端"
+```json
 "streamSettings": {
   "method": "xhttp",
   "security": "tls",
@@ -546,11 +546,11 @@ SNI 与 Host 不一致即域前置；两者是同一 zone 内不同子域即同�
 
 两条 TLS 握手 SNI 分别是 cf1 和 cf2，两个方向的 Host 都是 cf3，CF 按 cf3 回源到你的 VPS。
 
-当 cf1 和 cf2 都橙云直指同一台 VPS 时，不填 `host` 也可以，各方向 Host 跟着自己的 SNI 走，CF 回源到同一台机器同一 path，照样按 UUID 缝合。需要 `host` 的场景：源站前有 Nginx 按 `server_name` 分流、只想为一个域名配回源规则（Origin Rules / Page Rules）、或想让两个方向走完全一样的回源逻辑。
+当 cf1 和 cf2 橙云均指向同一台 VPS 时，不填 `host` 也可以，各方向 Host 跟着自己的 SNI 走，CF 回源到同一台机器同一 path，照样按 UUID 缝合。需要 `host` 的场景：源站前有 Nginx 按 `server_name` 分流、只想为一个域名配回源规则、或想让两个方向走完全一样的回源逻辑。
 
 #### 上行去程优 + 下行回程优，非对称 XMUX
 
-```json title="客户端"
+```json
 "xhttpSettings": {
   "path": "/yourpath",
   "mode": "stream-up",
@@ -585,11 +585,7 @@ SNI 与 Host 不一致即域前置；两者是同一 zone 内不同子域即同�
 
 #### 上/下行 REALITY 直连 + 下/上行过 CDN
 
-最接近"REALITY 套 CDN"的做法。上下行必须落到同一个 XHTTP 入站，而一个入站只能有一种 `security`，所以 REALITY 和 TLS 的终结都挪到 XHTTP 入站前面。
-
-服务端，两个入口一个入站：
-
-```json title="服务端"
+```json
 {
   "inbounds": [
     // 唯一的 XHTTP 入站，明文，只听本地
@@ -604,7 +600,7 @@ SNI 与 Host 不一致即域前置；两者是同一 zone 内不同子域即同�
         "sockopt": { "trustedXForwardedFor": ["CF-Connecting-IP"] }
       }
     },
-    // 入口 A：REALITY 前门，占 443，非法 VLESS 首包回落到 1234
+    // 入口 A：REALITY 前门，监听 443，非法 VLESS 首包回落到 1234
     {
       "listen": "0.0.0.0",
       "port": 443,
@@ -630,7 +626,7 @@ SNI 与 Host 不一致即域前置；两者是同一 zone 内不同子域即同�
 }
 ```
 
-入口 B 是 Nginx，监听 CF 允许的回源端口 8443，持真证书，服务下行 GET：
+入口 B 是 Nginx，监听回源端口 8443，持真证书：
 
 ```nginx
 server {
@@ -651,9 +647,7 @@ server {
 }
 ```
 
-客户端：
-
-```json title="客户端"
+```json
 {
   "settings": {
     "address": "你的VPS_IP",
@@ -692,7 +686,7 @@ server {
 }
 ```
 
-上行 `POST /yourpath/UUID` 直连 443，先过 REALITY 鉴权，解密后首包是 H2 preface 而非合法 VLESS，回落至 127.0.0.1:1234。下行 `GET /yourpath/UUID` 走 CF 的 QUIC H3，CF 回源到 8443 的 Nginx 再转给同一个 127.0.0.1:1234，两方按 UUID 汇合。
+上行 `POST /yourpath/UUID` 直连 443，REALITY 鉴权通过后，首包非法流量回落至 127.0.0.1:1234。下行 `GET /yourpath/UUID` 走 CF 的 QUIC H3，CF 回源到 8443 的 Nginx 反代给同一个 127.0.0.1:1234，两方按 UUID 汇合。
 
 把客户端的上行、下行对调，就是上行过 CDN、下行 REALITY 直连，服务端配置不用改。
 
@@ -700,7 +694,7 @@ server {
 
 443 监听 raw + REALITY 入站，REALITY 鉴权失败的流量回落本机 Nginx，由 Nginx 提供伪装站并将 `/yourpath` 反代到内部 XHTTP 入站；REALITY 鉴权通过但首包非法的流量回落到同一个内部 XHTTP 入站：
 
-```json title="服务端"
+```json
 {
   "inbounds": [
     // 内部 XHTTP 入站，监听本地
@@ -749,13 +743,13 @@ server {
 
 XHTTP 的 UUID 只在内部入站校验，几种客户端出站方案共用同一个 `path` 和 UUID。Nginx 配置参考 [Nginx 前置](#nginx-前置tls)，将监听端口改为8443，并给 `your.domain.com` 留一个 `server_name` 用于主动探测回落。
 
-不能使用 `path` 进行回落，REALITY/TLS 下 XHTTP 为 H2，path 提取只解析 H1 的明文请求行，且 XHTTP 会在 path 后追加 UUID 和 seq，H1 同样无法匹配。
+不能使用 `path` 进行回落，REALITY/TLS 下为 H2，path 提取只解析 H1 的明文请求行，且 XHTTP 会在 path 后追加 UUID 和 seq，H1 下同样无法匹配。
 
 ### 元数据搬出 URL
 
 默认会话 ID、seq 拼在 path，padding 挂 `Referer`，位置都是固定的；[请求混淆](#请求混淆) 的参数能把一条 packet-up 伪装成普通带 cookie 的 GET，请求变成一串没有 body 的 GET：
 
-```json title="客户端/服务端"
+```json
 "xhttpSettings": {
   "path": "/yourpath",
   "mode": "packet-up",
@@ -783,7 +777,9 @@ XHTTP 的 UUID 只在内部入站校验，几种客户端出站方案共用同�
 
 ### Browser Dialer
 
-```bash title="客户端"
+使用真实浏览器的网络栈和 TLS 指纹发起连接，数据经本地 WebSocket 回到 Xray，有一定的性能损耗：
+
+```bash
 XRAY_BROWSER_DIALER=127.0.0.1:8080 ./xray -c config.json
 ```
 
@@ -791,16 +787,13 @@ XRAY_BROWSER_DIALER=127.0.0.1:8080 ./xray -c config.json
 
 - `address` 必须是域名，要指定 IP 就改系统 hosts 或内置 DNS
 - `tlsSettings` 将失效，HTTP 版本由浏览器决定，`SNI == host == address`
-- 非 80/443 的端口已支持（2026-04 起，端口会自动拼进交给浏览器的 URL）
 - 浏览器到服务端必须直连
-
-Xray 把 "连接 `https://cf1.domain.com/yourpath`" 的动作交给页面里的 JS，浏览器用自己真实的网络栈和 TLS 指纹发出，数据经本地 WebSocket 回到 Xray，指纹是真的，但有一定的性能损耗。
 
 ### 四层调优（BBR / TFO / MPTCP）
 
 XHTTP 走 H1/H2 时底层是一条 TCP，可在 `sockopt` 里对它做拥塞控制、握手和多路径调优：
 
-```json title="客户端"
+```json
 "streamSettings": {
   "method": "xhttp",
   "xhttpSettings": { "path": "/yourpath" },
@@ -822,7 +815,7 @@ XHTTP 走 H1/H2 时底层是一条 TCP，可在 `sockopt` 里对它做拥塞控�
 
 ### FinalMask 给 H3 调拥塞控制
 
-```json title="客户端"
+```json
 "streamSettings": {
   "method": "xhttp",
   "xhttpSettings": { "path": "/yourpath" },
@@ -867,7 +860,7 @@ CF 面板可以再加一条 Cache Rules，按 CDN 主机名或 XHTTP path 匹配
 
 `VLESS Encryption` 在 VLESS 内层端到端认证加密，独立于外层 TLS 与公共 CA 体系，客户端预置服务端静态公钥（X25519 或 ML-KEM-768），每条连接做临时密钥交换，兼具前向安全与后量子安全；载荷走 AES-256-GCM / ChaCha20-Poly1305，即使 CF 或链路上任何人拿着有效证书 MITM 掉外层 TLS，没有服务端静态私钥也无法伪造内层握手和读取内容。
 
-执行 `xray vlessenc` 一键生成配对的 `decryption`/`encryption`，输出含 X25519 与 ML-KEM-768 两版，二选一不要混用（握手本身两者都后量子安全，ML-KEM-768 版额外能防客户端参数泄露后被未来量子计算机破解出私钥冒充服务端）
+执行 `xray vlessenc` 生成配对的 `decryption`/`encryption`，输出含 X25519 与 ML-KEM-768 两版，二选一不要混用（握手本身两者都后量子安全，ML-KEM-768 版额外能防客户端参数泄露后被未来量子计算机破解出私钥冒充服务端）
 
 配置串以 `.` 分块:
 
@@ -891,21 +884,21 @@ Padding 是可选的参数，仅作用于 1-RTT 以消除握手的长度特征�
 
 服务端、客户端可以设置不同的 padding 参数，按 len、gap 的顺序无限串联，第一个 padding 需概率 100%、至少 35 字节
 
-```go title="common.go"
+```go
 paddingLens = [][3]int{{100, 111, 1111}, {50, 0, 3333}}
 paddingGaps = [][3]int{{75, 0, 111}}
 ```
 
 配置模板：
 
-```json title="服务端"
+```json
 "settings": {
   "users": [{ "id": "你的UUID" }],
   "decryption": "mlkem768x25519plus.native.600s.私钥"
 }
 ```
 
-```json title="客户端"
+```json
 "settings": {
   "address": "优选 IP",
   "port": 443,
@@ -926,7 +919,7 @@ paddingGaps = [][3]int{{75, 0, 111}}
 
 CF 面板开启 ECH 后，客户端在 `tlsSettings` 加 `echConfigList` 即可加密 SNI。格式为 `"域名+DNS服务器"`，服务器支持 `https://`（DoH）、`h2c://`、`udp://` 三种：
 
-```json title="客户端"
+```json
 "tlsSettings": {
   "serverName": "cf1.domain.com",
   "alpn": ["h2"],
@@ -979,7 +972,7 @@ acme.sh --install-cert -d "domain.com" --ecc \
 chmod +r ~/xray_cert/xray.key   # Xray 非 root 运行时
 ```
 
-acme.sh 装好时自带每日 cron，到期前 30 天自动续并重新执行 install-cert；Xray 默认热重载证书。
+acme.sh 自带每日 cron，自动续期并重新执行 install-cert，Xray 默认热重载证书。
 
 #### CF Origin CA 证书
 
