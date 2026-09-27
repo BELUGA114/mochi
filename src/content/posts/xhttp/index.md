@@ -72,9 +72,7 @@ draft: false
 **注意：**
 
 - H3 的条件是 `alpn` 仅有一项且值为 `h3`，`"alpn": ["h3", "h2"]` 得到的是 H2，客户端不会优先 H3、失败退回 H2
-
 - 服务端 `alpn` 为 `["h3"]` 时才监听 UDP/QUIC，否则一律监听 TCP
-
 - 套 CF 时客户端 H3 会被降成 H1/H2 回源，服务端无需监听 UDP
 
 ## XMUX
@@ -127,9 +125,7 @@ padding 默认放在 `Referer: /yourpath?x_padding=XXXX...`，这些在 CDN、�
 `extra` 字段用于向客户端分享配置，服务端只认自己 `xhttpSettings` 里的同名参数：
 
 - **两端须一致：** `padding` 的 6 项以及 `sessionIDPlacement`、`sessionIDKey`、`seqPlacement`、`seqKey`、`uplinkDataPlacement`、`uplinkDataKey`。服务端会校验参数，两端不一致时请求会被 400 拒绝
-
 - **仅客户端：** `sessionIDTable`、`sessionIDLength`、`uplinkHTTPMethod`、`uplinkChunkSize`、`noGRPCHeader`、`scMinPostsIntervalMs`
-
 - **仅服务端：** `serverMaxHeaderBytes`、`scStreamUpServerSecs`、`scMaxBufferedPosts`、`noSSEHeader`
 
 `scMaxEachPostBytes` 是单向约束，客户端按自己的值分包，服务端只拿自己的 `To` 做上限，不小于客户端即可。
@@ -177,10 +173,11 @@ padding 默认放在 `Referer: /yourpath?x_padding=XXXX...`，这些在 CDN、�
 
 **注意：**
 
+- `downloadSettings.xhttpSettings` 里也可写 `extra`，与上行的 `extra` 完全一致，[XMUX](#xmux) 和[请求混淆](#请求混淆)两节介绍的字段与规则全部适用
+- **下行配置不继承上行的任何配置**，XMUX 参数 roll 出的具体数也是各自独立随机的，随时间推移上下行复用完全不对称
 - 数据放 header 时要相应调大 `serverMaxHeaderBytes`（如 16384，过 CDN 还要留意中间盒的请求头上限）
 - `tokenish` 生成随机 Base62 串，按 HPACK huffman 编码后长度落在 `xPaddingBytes` 区间内，服务端校验同样按 huffman 长度算，比一串 `X` 更像真实数据
 - `queryInHeader` 仍是把 padding 塞进某个头（可自定义，默认 `Referer`）的 URL query 里，对 CF 兼容性最好；`cookie` / `header` / `query` 则完全离开 URL
-- 会话 ID 不再是 UUID，而是从字符表随机取的串（如 `/yourpath/aB3xO6nPqZ2r`），`sessionIDTable` × `sessionIDLength` 的组合空间须大于 2^31，否则报错
 
 ## XHTTP + REALITY 对比 RAW + REALITY + Vision
 
@@ -195,9 +192,9 @@ REALITY 时客户端固定使用 H2，XTLS/Vision 只在 TCP+TLS/REALITY 下可�
 | 中间盒/CDN       | 不可能                            | 本身为此设计                          |
 | 抗单连接时序分析 | Vision 内层握手随机填充           | padding + XMUX 随机化 + 多流混合      |
 
-- 适合 RAW：纯直连、要单流拉满带宽、服务器 CPU 不富裕、Linux环境
+适合 RAW：纯直连、要单流拉满带宽、服务器 CPU 不富裕、Linux环境
 
-- 适合 XHTTP：网页浏览、有大量小连接、要上下行分离、要过 CDN 或前置反代
+适合 XHTTP：网页浏览、有大量小连接、要上下行分离、要过 CDN 或前置反代
 
 ## 玩法与示例配置
 
@@ -402,12 +399,9 @@ location /yourpath {
 
 ### 上下行分离
 
-关于 `downloadSettings`：
+`downloadSettings` 是一套完整的 `streamSettings` 外加 `address`/`port`，`method` 必须为 `"xhttp"`（不可省略），`security` 可为 `"tls"` 或 `"reality"`。
 
-- 是一套完整的 `streamSettings` 外加 `address`/`port`，`method` 必须为 `"xhttp"`（不可省略），`security` 可为 `"tls"` 或 `"reality"`
-- 下行的 `xhttpSettings` 里也可写 `extra`（即 `downloadSettings.xhttpSettings.extra`），与上行的 `extra` 完全一致，[XMUX](#xmux) 和[请求混淆](#请求混淆)两节介绍的字段与规则全部适用
-- 下行配置不继承上行的任何配置；连 XMUX 默认值 roll 出的具体数都是各自独立随机的，随时间推移上下行复用完全不对称
-- `sockopt` 项也可被分享，但上行 `sockopt` 设 `"penetrate": true` 可覆盖下行，适合打 `mark` 的情况
+`sockopt` 项也可被分享，但上行 `sockopt` 设 `"penetrate": true` 可覆盖下行，适合打 `mark` 的情况。
 
 #### 同一 CDN：上行 IPv4 H2，下行 IPv6 H3
 
@@ -436,6 +430,34 @@ location /yourpath {
 ```
 
 客户端随机生成 UUID，上行 `POST /yourpath/UUID` 走 IPv4 的 TCP+TLS+H2 到边缘 IP-A，下行 `GET /yourpath/UUID` 走 IPv6 的 QUIC H3 到边缘 IP-B。两个方向的源 IP、目标 IP、四层协议、HTTP 版本全不同。服务端按 path 中的 UUID 把两半缝合，30 秒内没缝上就终止会话，基于单条连接的检测只能看到半条流。
+
+#### 上行下行各挂一个 CDN
+
+上行和下行套两家不同的 CDN，或者一个套 CDN、一个直连。例如上行走 CF 的 cf1，下行走另一家 CDN：
+
+```json
+"streamSettings": {
+  "method": "xhttp",
+  "security": "tls",
+  "tlsSettings": { "serverName": "cf1.domain.com", "fingerprint": "chrome" },
+  "xhttpSettings": {
+    "path": "/yourpath",
+    "mode": "stream-up",
+    "extra": {
+      "downloadSettings": {
+        "address": "另一家 CDN 的优选 IP",
+        "port": 443,
+        "method": "xhttp",
+        "security": "tls",
+        "tlsSettings": { "serverName": "b.other-cdn.com", "fingerprint": "chrome" },
+        "xhttpSettings": { "path": "/yourpath" }
+      }
+    }
+  }
+}
+```
+
+两家 CDN 都要回源到同一台 VPS 的同一个 XHTTP 入站、`path` 一致，服务端按 UUID 缝合。此时两个方向不只是 IP 和协议不同，连所属的 CDN 基础设施都分开了，任何一方手里都只有半条流。
 
 #### 同域域前置
 
@@ -624,6 +646,36 @@ server {
 
 上行 `POST /yourpath/UUID` 直连 VPS 443，先过 REALITY 鉴权，解密后首包是 H2 preface 而非合法 VLESS，回落至 127.0.0.1:1234。下行 `GET /yourpath/UUID` 走 CF 的 QUIC H3，CF 回源到 8443 的 Nginx 再转给同一个 127.0.0.1:1234，两方按 UUID 汇合。
 
+### 把元数据搬出 URL
+
+默认会话 ID、seq 拼在 path，padding 挂 `Referer`，位置都是固定的；[请求混淆](#请求混淆) 的参数能把一条 packet-up 伪装成普通带 cookie 的 GET，请求变成一串没有 body 的 GET：
+
+```json title="客户端/服务端"
+"xhttpSettings": {
+  "path": "/yourpath",
+  "mode": "packet-up",
+  "extra": {
+    "xPaddingObfsMode": true,
+    "xPaddingPlacement": "cookie",
+    "xPaddingKey": "_ga",
+    "xPaddingMethod": "tokenish",
+    "sessionIDPlacement": "cookie",
+    "sessionIDKey": "sid",
+    "sessionIDTable": "Base62",
+    "sessionIDLength": "16-24",
+    "seqPlacement": "cookie",
+    "seqKey": "n",
+    "uplinkDataPlacement": "cookie",
+    "uplinkDataKey": "d",
+    "uplinkHTTPMethod": "GET"
+  }
+}
+```
+
+`uplinkDataPlacement` 和 `uplinkHTTPMethod` 的 `GET` 仅支持 packet-up 模式，会话 ID 从 UUID 换成 16-24 位的 Base62 串，更像普通 session token。
+
+代价是 cookie 每块只装 2 到 3 KB（`uplinkChunkSize` 可调），上行一大就是一长串 cookie，所以只适合上行小、应对 body 检查的场景。下行 GET 的 `Content-Type: text/event-stream` 可由服务端 `noSSEHeader` 去掉；换成 stream-up/one 时，上行的 `application/grpc` 伪装由客户端 `noGRPCHeader` 去掉。
+
 ### Browser Dialer
 
 ```bash title="客户端"
@@ -646,18 +698,23 @@ Xray 把 "连接 `https://cf1.domain.com/yourpath`" 的动作交给页面里的 
   "method": "xhttp",
   "xhttpSettings": { "path": "/yourpath" },
   "security": "tls",
-  "tlsSettings": { "serverName": "cf1.domain.com", "alpn": ["h3"], "fingerprint": "chrome" },
+  // 直连，serverName 用解析到 VPS 的域名（灰云或主域）
+  "tlsSettings": { "serverName": "domain.com", "alpn": ["h3"], "fingerprint": "chrome" },
   "finalmask": {
-    "quicParams": {
-      "congestion": "force-brutal",
-      "brutalUp": "30 mbps",
-      "udpHop": { "ports": "20000-50000", "interval": "5-10" }
-    }
+    "quicParams": { "congestion": "force-brutal", "brutalUp": "30 mbps" },
+    "udp": [
+      // v26.9.9 起端口跳跃是独立的 UDP mask，须在最外层，仅客户端
+      { "type": "udphop", "settings": { "remotePorts": "20000-50000", "interval": "5-10", "mode": "intervalRemote" } }
+    ]
   }
 }
 ```
 
-XHTTP H3 无协商机制，用不了 `brutal`，只能用免协商的 `force-brutal`，它强制上行按 `brutalUp` 定速发包，只对 H3 直连有意义。官方文档不建议服务端裸跑 quic-go H3，更推荐藏在真 Nginx/Caddy 后面。
+XHTTP H3 无协商机制，用不了 `brutal`，只能用免协商的 `force-brutal`，它强制上行按 `brutalUp` 定速发包。`force-brutal` 和端口跳跃都只对 H3 直连有意义，套 CF 时用不上：CDN 只认标准端口，也不会把定速带到回源段。
+
+端口跳跃在 v26.9.9 从 `quicParams.udpHop` 挪到了 `finalmask.udp` 下，字段从 `ports` 改叫 `remotePorts` 且必须填 `mode`（`intervalRemote` 按间隔换远端端口，`intervalLocal` 换本地源端口，`perConnRemote` 每条连接定一次），老写法在新版会被静默丢弃。服务端要让被跳到的整段端口都能到达 QUIC 监听口，一般在 nftables/iptables 把端口段重定向过去。
+
+H3 直连默认带着 quic-go 的 Chrome QUIC 指纹（零长 Connection ID），要关掉可在 `quicParams` 里设 `disableChromeParrot`。官方文档不建议服务端裸跑 quic-go H3，更推荐藏在真 Nginx/Caddy 后面。
 
 ## 域名与 Cloudflare
 
@@ -744,7 +801,7 @@ CF 面板开启 ECH 后，客户端在 `tlsSettings` 加 `echConfigList` 即可�
 }
 ```
 
-域前缀强制使用该域名的 ECHConfig，不向 DNS 服务器暴露在查谁的 HTTPS 记录。
+不写域前缀时按 `serverName` 去查；写成 `域名+DNS服务器` 则强制查这个域名的 HTTPS(TYPE65) 记录取 ECHConfig。这次查询本身对该 DNS 服务器是可见的，想彻底不查 DNS 就直接填一段 base64 的 ECHConfigList。
 
 ### 证书：ACME DNS-01 与 CF Origin CA
 

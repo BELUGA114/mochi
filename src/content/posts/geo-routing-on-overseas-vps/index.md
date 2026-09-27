@@ -2,12 +2,11 @@
 title: VPS 上的分流：境内外判断交给 IP，域名只用来选解析器
 published: 2026-08-30
 description: geosite 的 cn 表是为客户端建的，把它搬到服务端做境内外出站判定，误判是普遍存在的。
-image: "./cover.png"
+image: ""
 tags: [Xray, 分流, DNS, VPS]
 category: 网络
 draft: false
 ---
-
 ## 环境与说明
 
 Xray-core v26.6.1，配置里的 `warp` 出站是保守侧的中转，它可以是 Cloudflare WARP 或其他出站，不重要。
@@ -24,7 +23,7 @@ Xray 官方的教程对这张表的描述是 [「大杂烩，只要沾点中国�
 
 把两张表拉出来对一遍，能看到不少域名同时命中：
 
-```text title="同时出现在 cn 与 geolocation-!cn 里的域名"
+```text
 CN                full:www.gstatic.com
 CN                full:www.apple.com
 CN                full:init.itunes.apple.com
@@ -68,7 +67,7 @@ GEOLOCATION-!CN   domain:c.pki.goog
 
 这节对应的路由配置：
 
-```jsonc title="config.json routing" {2, 9}
+```jsonc
 "routing": {
   "domainStrategy": "IPIfNonMatch",   // 域名规则不命中时解析成 IP 再匹配，IP 判据靠它生效
   "rules": [
@@ -142,7 +141,7 @@ dnsmasq-china-list 要回答的问题是「哪些域名用境内解析器解析�
 
 对应的 DNS 配置：
 
-```jsonc title="config.json dns" {9, 20, 23, 25}
+```jsonc
 "dns": {
   "queryStrategy": "UseIPv4",
   "servers": [
@@ -182,14 +181,14 @@ dnsmasq-china-list 要回答的问题是「哪些域名用境内解析器解析�
 
 1. `IPIfNonMatch` 下的一个域名解析出多个地址时，每条 IP 规则会拿全部地址去试，任一命中就算命中。例如 `www.bilibili.com` 一次返回 20 个地址，只要其中一个满足 `expectedIPs: ["geoip:cn"]`，整条连接就走保守侧，而实际建连用的可能是另一个地址：
 
-```log title="access.log"
+```log
 22:48:55.438714 UDP:223.5.5.5:53 got answer: www.bilibili.com. -> [61.147.236.101, 183.131.147.48, 183.131.147.30, 183.131.147.29, 183.131.147.28, 183.131.147.27, 175.4.62.129, 175.4.62.128, 175.4.62.127, 119.84.174.97, 119.84.174.96, 119.84.174.68, 119.84.174.67, 114.230.222.141, 114.230.222.140, 114.230.222.139, 114.230.222.138, 61.147.236.104, 61.147.236.103, 61.147.236.102] 337.538933ms
 22:48:55.438724 accepted tcp:www.bilibili.com:443 [inbound-443 -> warp]
 ```
 
 2. 时序：
 
-```log title="access.log" {3-4}
+```log
 22:49:13.697898 UDP:223.5.5.5:53 got answer: www.jd.com. -> [] 4.000179582s <app/dns: record not found>
 22:49:14.108768 DOH//1.1.1.1 got answer: www.jd.com. -> [140.150.36.51, 138.113.102.14] 411.088937ms
 22:49:14.108794 accepted tcp:www.jd.com:443 [inbound-443 >> direct]
@@ -216,7 +215,7 @@ dnsmasq-china-list 要回答的问题是「哪些域名用境内解析器解析�
 
 要判断列表行为，需要拿到域名、应答的解析器、返回的 IP 和最终出站：
 
-```bash title="从 access.log 里抽出判定结果"
+```bash
 # 域名 + 出站
 sed -nE 's#.*accepted tcp:([^ ]+) \[([^]]*)\].*#\2\t\1#p' access.log | sort -u
 
@@ -232,10 +231,10 @@ sed -nE 's#.*(DOH//[^ ]+|UDP:[^ ]+) (got answer|cache HIT): ([^ ]+)\. -> \[([^]]
 | ------------------ | ------------------------------------------------------------------------------ | -------------------------------------- |
 | 外国公司的境内服务 | www.gstatic.com, dl.google.com, www.apple.com, ocsp.globalsign.com, c.pki.goog | 前提不匹配造成的误判                   |
 | 真正的境内服务     | www.baidu.com, www.bilibili.com, www.taobao.com                                | 前面那条精确表有没有把该走境内的也截走 |
-| `.cn` 顶级域       | nvidia.cn, mirrors.tuna.tsinghua.edu.cn                                        | 顶级域规则的覆盖和误判                 |
+| `.cn` 顶级域     | nvidia.cn, mirrors.tuna.tsinghua.edu.cn                                        | 顶级域规则的覆盖和误判                 |
 | 境外对照组         | github.com, www.youtube.com, www.cloudflare.com                                | 规则有没有串                           |
 
-```bash title="批量检测"
+```bash
 while read -r d; do curl -sI --max-time 5 "https://$d" >/dev/null; done < domains.txt
 ```
 
@@ -263,7 +262,7 @@ while read -r d; do curl -sI --max-time 5 "https://$d" >/dev/null; done < domain
 
 `keepAlive` 写 25，是因为这条出站平时几乎空闲，握手过期后重新握手要是撞上丢包，就够让一个 5 秒超时的探测失败。
 
-```json title="config.json" showLineNumbers collapse={5-24, 30-34}
+```json
 {
   "dns": {
     "queryStrategy": "UseIPv4",
