@@ -130,6 +130,18 @@ padding 默认放在 `Referer: /yourpath?x_padding=XXXX...`，这些在 CDN、�
 
 `scMaxEachPostBytes` 是单向约束，客户端按自己的值分包，服务端只拿自己的 `To` 做上限，不小于客户端即可。
 
+:::note[混淆参数随着封锁逐步加入]
+最先是 CDNVideo 只要请求包含 `x_padding=XXXXX` 参数，就会抛出 403([issue #4346](https://github.com/XTLS/Xray-core/issues/4346#issuecomment-3545201732))，于是有了换键名、换字符表（`tokenish`）和挪位置。
+
+接着 Yandex Cloud、VK Cloud 等禁掉 POST（[Yandex 文档](https://yandex.cloud/en/docs/cdn/operations/resources/configure-http)），于是 `uplinkHTTPMethod` 允许改用 PUT、PATCH；再往后有 CDN 按 UUID 的 `8-4-4-4-12` 形状封 session ID（[issue #6264](https://github.com/XTLS/Xray-core/issues/6264)），于是 `sessionIDTable`、`sessionIDLength` 能将其伪装成普通 token。
+
+padding 默认是以 `Referer: /yourpath?x_padding=...` 的形式发出，如果有针对该形式 403 的 CDN/WAF 时优先把 padding 放进 header 尝试。
+:::
+
+另外 Firefox 93+ 在严格追踪保护 / 隐私窗口下会无视 `unsafe-url` 等宽松 referrer 策略并裁掉跨站请求的 `Referer`([Mozilla 安全博客](https://blog.mozilla.org/security/2021/10/05/firefox-93-features-an-improved-smartblock-and-new-referrer-tracking-protections/))，默认把 padding 置于 `Referer` 的 [Browser Dialer](#browser-dialer) 会因此连不上，把 padding 挪到 header 可以解决。
+
+Xray 的思路是不要一次性把手里的牌打完，所以混淆默认关闭，默认值保守。等某个特征真被针对了再使用对应参数，防止过度配置本身成了新特征，所以日常使用保持默认值即可。
+
 ## 客户端 extra 模板
 
 示例为 packet-up 模式，覆盖 `extra` 可用的全部字段，可按需更改或删掉走默认：
@@ -353,11 +365,11 @@ Xray 的判定是哨兵头存在就信任 `X-Forwarded-For` 的第一段，`CF-C
 
 1. 套 CDN 后服务端日志报 `invalid x_padding length:0`、请求全被 400。多半是 CDN 把 URL 的 query string 丢了，padding 默认在 `Referer` 的 `?x_padding=` 里（见[请求混淆](#请求混淆)），CDN 一旦不把 query 透传回源，服务端拿到的就是空 padding。例如 CloudFront 的缓存策略默认不带 query string，要在 Cache Policy 里把 query string 设为转发全部。
 
-2. CDN 或 WAF 把 `?x_padding=` 当可疑参数拦掉导致 403，请求无法回源。可以把 padding 挪出 URL，开启 `xPaddingObfsMode` 后把 `xPaddingPlacement` 设为 `cookie` 或 `header`，或至少换掉 `xPaddingKey`，做法见[把元数据搬出 URL](#把元数据搬出-url)。
+2. CDN 或 WAF 把 `?x_padding=` 当可疑参数拦掉导致 403，请求无法回源。可以把 padding 挪出 URL，开启 `xPaddingObfsMode` 后把 `xPaddingPlacement` 设为 `cookie` 或 `header`，或至少换掉 `xPaddingKey`，做法见[把元数据搬出 URL](#元数据搬出-url)。
 
 ### Nginx 前置（TLS）
 
-Nginx 拿走 443（持真证书），XHTTP 入站退到本地明文：
+Nginx 拿走 443（持真证书），XHTTP 入站监听本地明文：
 
 ```nginx
 server {
@@ -446,7 +458,50 @@ export default {
 
 CF 面板里给 Worker 绑一条 `front.domain.com/yourpath*` 路由，客户端 `address`/`serverName`/`host` 指向 `front.domain.com`，path、UUID、padding 原样透传。
 
-前置域名与源站解耦，适用于随机挑后端、给已被阻断的源站套层 CF 或把前置逻辑与回源分开的情况。受 Worker 的 CPU 与子请求配额限制。
+前置域名与源站解耦，适用于随机挑后端、给已被阻断的源站套层 CF 或把前置逻辑与回源分开的情况，受 Worker 的 CPU 与子请求配额限制。
+
+### Cloudflare Argo 隧道（cloudflared 内网穿透）
+
+前面几种过 CDN 的方案都要求源站有公网 IP、且要监听端口。使用 Argo 隧道允许源站无监听端口，公网 IP 和证书，只需运行 `cloudflared` 主动向 CF 建立仅出站的长连接。
+
+适合 NAT VPS、无 DDNS 且只有动态 IPv6 的机器、回源端口受限或源站 IP 无法直连的情况。
+
+XHTTP 入站监听本地明文，由 cloudflared 的 ingress 按域名直接转发：
+
+```json title="服务端"
+{
+  "listen": "127.0.0.1",
+  "port": 1234,
+  "protocol": "vless",
+  "settings": { "users": [{ "id": "你的UUID" }], "decryption": "none" },
+  "streamSettings": {
+    "method": "xhttp",
+    "xhttpSettings": { "path": "/yourpath" }
+  }
+}
+```
+
+cloudflared 的固定隧道配置（`~/.cloudflared/config.yml`）：
+
+```yaml
+tunnel: 你的隧道ID
+credentials-file: /home/vpsadmin/.cloudflared/你的隧道ID.json
+protocol: auto # 隧道到 CF 边缘的传输，优先尝试 QUIC(UDP 7844)，异常时自动回落 H2，如已确定 UDP 被封锁、或环境对 QUIC 支持不佳，建议直接指定为 http2
+ingress:
+  - hostname: cf1.domain.com
+    service: http://127.0.0.1:1234
+    originRequest:
+      http2Origin: true # 回源本地入站用 H2，XHTTP 需要
+  - service: http_status:404
+```
+
+客户端沿用[过 CDN（TLS）](#过-cdntls)的字段，`serverName` 与 `host` 填隧道绑定的 `cf1.domain.com`。
+
+**注意：**
+
+- 必须用固定（命名）隧道，`trycloudflare` 临时隧道不支持 XHTTP，只支持 WS
+- 回源经隧道只有 H2，TLS 由 CF 边缘和隧道负责，Xray 入站是明文 h2c
+- 一条隧道可按 hostname 分流给多个入站，也能和 Worker 前置叠着用
 
 ### 上下行分离
 
@@ -776,7 +831,9 @@ XHTTP 的 UUID 只在内部入站校验，几种客户端出站方案共用同�
 
 `uplinkDataPlacement` 和 `uplinkHTTPMethod` 的 `GET` 仅支持 packet-up 模式，会话 ID 从 UUID 换成 16-24 位的 Base62 串，更像普通 session token。
 
-代价是 cookie 每块只装 2 到 3 KB（`uplinkChunkSize` 可调），上行一大就是一长串 cookie，所以只适合上行小、应对 body 检查的场景。下行 GET 的 `Content-Type: text/event-stream` 可由服务端 `noSSEHeader` 去掉；换成 stream-up/one 时，上行的 `application/grpc` 伪装由客户端 `noGRPCHeader` 去掉。
+代价是 cookie 每块只装 2 到 3 KB（`uplinkChunkSize` 可调），上行一大就是一长串 cookie，所以只适合上行小、应对 body 检查的场景。
+
+下行 GET 的 `Content-Type: text/event-stream` 可由服务端 `noSSEHeader` 去掉；换成 stream-up/one 时，上行的 `application/grpc` 伪装由客户端 `noGRPCHeader` 去掉。
 
 ### Browser Dialer
 
@@ -999,4 +1056,6 @@ chmod +r ~/xray_cert/xray.crt
 
 - packet-up 和 `Referer` 长 padding 会刷出大量长日志，建议在反代软件里指定不记录；开启请求混淆后也可让日志形态不再扎眼
 - `address` 填优选 IP 时 `serverName` 必填，且 IP 不能当 SNI，留空则无 SNI 扩展，CF 会拒
-- v26.9.8 起 REALITY 服务端强制 ClientHello 携带 X25519MLKEM768，奇怪和过时的指纹会直接被当回落流量处理
+- v26.7.11 起 REALITY 服务端在 `minClientVer` 留空时默认为 26.3.27，其他内核和旧客户端会被静默拒连，不建议降低 `minClientVer` 放行，也不要让客户端发出非正常的 ClientHello
+- v26.9.8 起 REALITY 服务端取消 `minClientVer` 限制并强制 ClientHello 携带 X25519MLKEM768，奇怪和过时的指纹会直接被当回落流量处理
+- XHTTP 目前只有 Xray 原生支持，sing-box 主线尚未内置，但有社区 fork 支持，Mihomo 自 2026 年 3 月（约 v1.19.22）起支持 `xhttp-opts`；不少订阅转换工具会把 XHTTP 的部分字段静默丢弃，使用中需留意
