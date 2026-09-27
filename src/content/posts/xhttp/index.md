@@ -7,6 +7,7 @@ tags: [VPS, Xray, XHTTP, REALITY, Cloudflare]
 category: 网络
 draft: false
 ---
+
 ## 前言
 
 本文来自对 [XHTTP: Beyond REALITY](https://github.com/XTLS/Xray-core/discussions/4113) 和社区讨论以及 Xray-core v26.6.1 源码的研读和实践。
@@ -24,8 +25,8 @@ draft: false
 
 ## 模式
 
-| 模式       | 上行                            | 下行     | HTTP 请求数 | 说明                         |
-| ---------- | ------------------------------- | -------- | ----------- | ---------------------------- |
+| 模式       | 上行                          | 下行     | HTTP 请求数 | 说明                         |
+| ---------- | ----------------------------- | -------- | ----------- | ---------------------------- |
 | packet-up  | 分包`POST /path/UUID/seq`     | GET 流式 | N 个        | 兼容性最强                   |
 | stream-up  | 流式`POST /path/UUID`         | GET 流式 | 2 个        | 上行不牺牲效率，上下行可分离 |
 | stream-one | 单个`POST /path/`，响应即下行 | 同一请求 | 1 个        | 最接近普通请求，REALITY 默认 |
@@ -60,12 +61,12 @@ draft: false
 
 三种 mode 决定工作模式，ALPN 决定底层 HTTP 版本，它们之间是解耦、可以任意组合的；ALPN 由客户端单方面决定：
 
-| 客户端配置                                 | 结果     |
-| ------------------------------------------ | -------- |
+| 客户端配置                               | 结果     |
+| ---------------------------------------- | -------- |
 | 只要有`realitySettings`                  | H2       |
 | 无`tlsSettings` 也无 REALITY             | HTTP/1.1 |
-| `alpn` 为 `["http/1.1"]`               | HTTP/1.1 |
-| `alpn` 为 `["h3"]`                     | H3       |
+| `alpn` 为 `["http/1.1"]`                 | HTTP/1.1 |
+| `alpn` 为 `["h3"]`                       | H3       |
 | 其余情况（不写`alpn`、写多项、写别的值） | H2       |
 
 **注意：**
@@ -78,14 +79,14 @@ draft: false
 
 XMUX 仅在客户端设置，H2/H3 均为 0-RTT 多路复用，XMUX 是控制它们的核心接口：
 
-| 参数                 | 含义                                                                | 全 0 时的默认值      |
-| -------------------- | ------------------------------------------------------------------- | -------------------- |
-| `maxConcurrency`   | 每条连接最多同时承载的代理请求数，达到后建新连接                    | 0（不限）            |
-| `maxConnections`   | 最多连接数，达到前每个新请求开新连接，之后开始复用                  | 3（固定）            |
-| `cMaxReuseTimes`   | 一条连接最多被复用几次                                              | 0（不限）            |
+| 参数               | 含义                                                                | 全 0 时的默认值    |
+| ------------------ | ------------------------------------------------------------------- | ------------------ |
+| `maxConcurrency`   | 每条连接最多同时承载的代理请求数，达到后建新连接                    | 0（不限）          |
+| `maxConnections`   | 最多连接数，达到前每个新请求开新连接，之后开始复用                  | 3（固定）          |
+| `cMaxReuseTimes`   | 一条连接最多被复用几次                                              | 0（不限）          |
 | `hMaxRequestTimes` | 一条连接累计承载的 HTTP 请求上限（对付 Nginx 每连接 1000 请求上限） | `"600-900"` 随机   |
 | `hMaxReusableSecs` | 一条连接的最长复用时长（对付 Nginx 一小时上限）                     | `"1800-3000"` 随机 |
-| `hKeepAlivePeriod` | 空闲时 H2/H3 保活间隔（秒），0 为 Chrome H2 45s / quic-go 10s       | 0                    |
+| `hKeepAlivePeriod` | 空闲时 H2/H3 保活间隔（秒），0 为 Chrome H2 45s / quic-go 10s       | 0                  |
 
 多线程测速前可设 `"maxConcurrency": 1`，只用一条底层连接复用到底可以设 `"maxConnections": 1`，日常可保持全 0。
 
@@ -101,25 +102,25 @@ XMUX 仅在客户端设置，H2/H3 均为 0-RTT 多路复用，XMUX 是控制它
 
 padding 默认放在 `Referer: /yourpath?x_padding=XXXX...`，这些在 CDN、反代的访问日志与 WAF 规则里都是显眼的模式，而混淆参数可以把元数据挪走并随机化：
 
-| 参数                     | 作用                                                                             | 默认值                                          |
-| ------------------------ | -------------------------------------------------------------------------------- | ----------------------------------------------- |
-| `xPaddingBytes`        | padding 长度范围（不可关闭，填 0 或负数会报错）                                  | 100-1000 随机                                   |
-| `xPaddingObfsMode`     | 总开关，开启后 padding 的位置与样式按下列参数走                                  | `false`（固定 `Referer` + `x_padding`）   |
-| `xPaddingPlacement`    | padding 放哪：`queryInHeader` / `cookie` / `header` / `query`            | `queryInHeader`                               |
-| `xPaddingMethod`       | padding 内容：`repeat-x`（重复 `X`）/ `tokenish`（随机 Base62）            | `repeat-x`                                    |
-| `xPaddingKey`          | query / cookie 的键名                                                            | `x_padding`                                   |
-| `xPaddingHeader`       | 承载 query 的头名（例如`Referer`、`Origin` 等）                              | `X-Padding`                                   |
-| `sessionIDPlacement`   | 会话 ID 放哪：`path` / `query` / `header` / `cookie`                     | `path`                                        |
-| `sessionIDKey`         | 非 path 放置时承载会话 ID 的键名（头名 / 参数名 / cookie 名）                    | `X-Session` / `x_session`（由放置位置决定） |
-| `sessionIDTable`       | 会话 ID 的字符表（预置`Base62`、`Alphabet`、`hex` 等）                     | 空（用 UUID）                                   |
-| `sessionIDLength`      | 会话 ID 的长度范围                                                               | 空（用 UUID）                                   |
-| `seqPlacement`         | seq 放哪：`path` / `query` / `header` / `cookie`                         | `path`                                        |
-| `seqKey`               | 非 path 放置时承载 seq 的键名（头名 / 参数名 / cookie 名）                       | `X-Seq` / `x_seq`（由放置位置决定）         |
-| `uplinkDataPlacement`  | packet-up 上行数据放哪：`body` / `header` / `cookie`（后两者仅 packet-up） | `body`                                        |
-| `uplinkDataKey`        | 非 body 放置时承载上行数据的键名（头名 / cookie 名）                             | `X-Data` / `x_data`（由放置位置决定）       |
-| `uplinkChunkSize`      | 数据放 header / cookie 时每块编码后的大小                                        | header 3-4KB / cookie 2-3KB                     |
-| `uplinkHTTPMethod`     | 上行 HTTP 方法，`GET` 仅 packet-up 可用                                        | `POST`                                        |
-| `serverMaxHeaderBytes` | 服务端接受的最大请求头字节数                                                     | 8192                                            |
+| 参数                   | 作用                                                                       | 默认值                                      |
+| ---------------------- | -------------------------------------------------------------------------- | ------------------------------------------- |
+| `xPaddingBytes`        | padding 长度范围（不可关闭，填 0 或负数会报错）                            | 100-1000 随机                               |
+| `xPaddingObfsMode`     | 总开关，开启后 padding 的位置与样式按下列参数走                            | `false`（固定 `Referer` + `x_padding`）     |
+| `xPaddingPlacement`    | padding 放哪：`queryInHeader` / `cookie` / `header` / `query`              | `queryInHeader`                             |
+| `xPaddingMethod`       | padding 内容：`repeat-x`（重复 `X`）/ `tokenish`（随机 Base62）            | `repeat-x`                                  |
+| `xPaddingKey`          | query / cookie 的键名                                                      | `x_padding`                                 |
+| `xPaddingHeader`       | 承载 query 的头名（例如`Referer`、`Origin` 等）                            | `X-Padding`                                 |
+| `sessionIDPlacement`   | 会话 ID 放哪：`path` / `query` / `header` / `cookie`                       | `path`                                      |
+| `sessionIDKey`         | 非 path 放置时承载会话 ID 的键名（头名 / 参数名 / cookie 名）              | `X-Session` / `x_session`（由放置位置决定） |
+| `sessionIDTable`       | 会话 ID 的字符表（预置`Base62`、`Alphabet`、`hex` 等）                     | 空（用 UUID）                               |
+| `sessionIDLength`      | 会话 ID 的长度范围                                                         | 空（用 UUID）                               |
+| `seqPlacement`         | seq 放哪：`path` / `query` / `header` / `cookie`                           | `path`                                      |
+| `seqKey`               | 非 path 放置时承载 seq 的键名（头名 / 参数名 / cookie 名）                 | `X-Seq` / `x_seq`（由放置位置决定）         |
+| `uplinkDataPlacement`  | packet-up 上行数据放哪：`body` / `header` / `cookie`（后两者仅 packet-up） | `body`                                      |
+| `uplinkDataKey`        | 非 body 放置时承载上行数据的键名（头名 / cookie 名）                       | `X-Data` / `x_data`（由放置位置决定）       |
+| `uplinkChunkSize`      | 数据放 header / cookie 时每块编码后的大小                                  | header 3-4KB / cookie 2-3KB                 |
+| `uplinkHTTPMethod`     | 上行 HTTP 方法，`GET` 仅 packet-up 可用                                    | `POST`                                      |
+| `serverMaxHeaderBytes` | 服务端接受的最大请求头字节数                                               | 8192                                        |
 
 `extra` 字段用于向客户端分享配置，服务端只认自己 `xhttpSettings` 里的同名参数：
 
@@ -133,7 +134,7 @@ padding 默认放在 `Referer: /yourpath?x_padding=XXXX...`，这些在 CDN、�
 
 示例为 packet-up 模式，覆盖 `extra` 可用的全部字段，可按需更改或删掉走默认：
 
-```json
+```json title="客户端"
 "xhttpSettings": {
   "path": "/yourpath",
   "extra": {
@@ -182,14 +183,14 @@ padding 默认放在 `Referer: /yourpath?x_padding=XXXX...`，这些在 CDN、�
 
 XTLS/Vision 只在 TCP+TLS/REALITY 下可用：
 
-|                  | RAW + REALITY + Vision            | XHTTP + REALITY                        |
-| ---------------- | --------------------------------- | -------------------------------------- |
-| 新连接延迟       | 每条代理连接一次 TCP+TLS 握手     | XMUX 复用，新请求 0-RTT，延迟更低      |
+|                  | RAW + REALITY + Vision            | XHTTP + REALITY                      |
+| ---------------- | --------------------------------- | ------------------------------------ |
+| 新连接延迟       | 每条代理连接一次 TCP+TLS 握手     | XMUX 复用，新请求 0-RTT，延迟更低    |
 | 多线程测速       | 更强，每条连接独立拥塞窗口        | 不如 Vision，除非`maxConcurrency: 1` |
-| CPU / 吞吐       | Linux 下自动 Splice，内核直接转发 | 无 Splice，H2 帧处理走用户态           |
-| 上下行分离       | 没有                              | 有（packet-up/stream-up）              |
-| 中间盒/CDN       | 不可能                            | 本身为此设计                           |
-| 抗单连接时序分析 | Vision 内层握手随机填充           | padding + XMUX 随机化 + 多流混合       |
+| CPU / 吞吐       | Linux 下自动 Splice，内核直接转发 | 无 Splice，H2 帧处理走用户态         |
+| 上下行分离       | 没有                              | 有（packet-up/stream-up）            |
+| 中间盒/CDN       | 不可能                            | 本身为此设计                         |
+| 抗单连接时序分析 | Vision 内层握手随机填充           | padding + XMUX 随机化 + 多流混合     |
 
 | 组合                                   | 适用场景                                                  |
 | -------------------------------------- | --------------------------------------------------------- |
@@ -205,7 +206,7 @@ XTLS/Vision 只在 TCP+TLS/REALITY 下可用：
 
 ### 基线：XHTTP + REALITY 直连
 
-```json
+```json title="服务端"
 {
   "inbounds": [
     {
@@ -233,7 +234,7 @@ XTLS/Vision 只在 TCP+TLS/REALITY 下可用：
 }
 ```
 
-```json
+```json title="客户端"
 {
   "inbounds": [
     {
@@ -275,7 +276,7 @@ XTLS/Vision 只在 TCP+TLS/REALITY 下可用：
 
 前提：cf1.domain.com 开橙云、CF 面板 SSL 模式为 Full (strict)，服务端持证书。
 
-```json
+```json title="服务端"
 "streamSettings": {
   "method": "xhttp",
   "xhttpSettings": { "path": "/yourpath" },
@@ -294,7 +295,7 @@ XTLS/Vision 只在 TCP+TLS/REALITY 下可用：
 
 客户端 H2 版，`address` 填优选 IP，`serverName` 填域名：
 
-```json
+```json title="客户端"
 {
   "settings": {
     "address": "优选 IP",
@@ -313,13 +314,13 @@ XTLS/Vision 只在 TCP+TLS/REALITY 下可用：
 
 H3 版只改一处 `alpn`：
 
-```json
+```json title="客户端"
 "tlsSettings": { "serverName": "cf1.domain.com", "alpn": ["h3"], "fingerprint": "chrome" }
 ```
 
 H2 且要流式上行时显式指定 `mode`（需 CF 面板开 gRPC 支持）：
 
-```json
+```json title="客户端"
 "xhttpSettings": {
   "path": "/yourpath",
   "mode": "stream-up"   // 或 stream-one
@@ -330,7 +331,7 @@ H2 且要流式上行时显式指定 `mode`（需 CF 面板开 gRPC 支持）：
 
 若 CDN 对请求体大小敏感，可调分包节奏：
 
-```json
+```json title="客户端"
 "xhttpSettings": {
   "path": "/yourpath",
   "extra": {
@@ -348,9 +349,11 @@ CF 会掐断下行 100 秒无实际数据的 HTTP，代理长连接需应用层�
 
 Xray 的判定是哨兵头存在就信任 `X-Forwarded-For` 的第一段，`CF-Connecting-IP` 的头 CF 每次回源都带。
 
-套 CDN 后服务端若反复刷 `invalid x_padding length:0`、请求全被 400，多半是 CDN 把 URL 的 query string 丢了。padding 默认藏在 `Referer` 的 `?x_padding=` 里（见[请求混淆](#请求混淆)），CDN 一旦不把 query 透传回源，服务端拿到的就是空 padding。CloudFront 最容易踩：缓存策略默认不带 query string，要在 Cache Policy 里把 query string 设为转发全部，别用会漏配的 Legacy 设置；CF 则确认没有哪条 Cache Rule 把这个 path 的 query 吃掉。
+常见问题：
 
-还有一类是 CDN 或 WAF 直接把 `?x_padding=` 当可疑参数拦掉回 403，请求根本到不了源站，服务端日志一片空白。这时把 padding 挪出 URL：开 `xPaddingObfsMode` 后把 `xPaddingPlacement` 设成 `cookie` 或 `header`，或至少换掉 `xPaddingKey`，做法见[把元数据搬出 URL](#把元数据搬出-url)。
+1. 套 CDN 后服务端日志报 `invalid x_padding length:0`、请求全被 400。多半是 CDN 把 URL 的 query string 丢了，padding 默认在 `Referer` 的 `?x_padding=` 里（见[请求混淆](#请求混淆)），CDN 一旦不把 query 透传回源，服务端拿到的就是空 padding。例如 CloudFront 的缓存策略默认不带 query string，要在 Cache Policy 里把 query string 设为转发全部。
+
+2. CDN 或 WAF 把 `?x_padding=` 当可疑参数拦掉导致 403，请求无法回源。可以把 padding 挪出 URL，开启 `xPaddingObfsMode` 后把 `xPaddingPlacement` 设为 `cookie` 或 `header`，或至少换掉 `xPaddingKey`，做法见[把元数据搬出 URL](#把元数据搬出-url)。
 
 ### Nginx 前置（TLS）
 
@@ -378,7 +381,7 @@ server {
 
 Xray 入站：
 
-```json
+```json title="服务端"
 {
   "listen": "127.0.0.1",
   "port": 1234,
@@ -430,7 +433,7 @@ Caddy 默认开启 H3，`reverse_proxy` 到同一个入站即可。
 
 不想让源站域名直接开橙云回源，可以用一段 Worker（或更轻量的 Snippet）把请求改写到后端域名再转发，客户端连的是 Worker 路由绑定的域名：
 
-```js
+```js title="Cloudflare Worker"
 export default {
   async fetch(request) {
     const url = new URL(request.url);
@@ -455,7 +458,7 @@ CF 面板里给 Worker 绑一条 `front.domain.com/yourpath*` 路由，客户端
 
 只改客户端：
 
-```json
+```json title="客户端"
 "streamSettings": {
   "method": "xhttp",
   "security": "tls",
@@ -483,7 +486,7 @@ CF 面板里给 Worker 绑一条 `front.domain.com/yourpath*` 路由，客户端
 
 上行和下行套两家不同的 CDN，或者一个套 CDN、一个直连。例如上行套 CF，下行套另一家 CDN：
 
-```json
+```json title="客户端"
 "streamSettings": {
   "method": "xhttp",
   "security": "tls",
@@ -511,17 +514,17 @@ CF 面板里给 Worker 绑一条 `front.domain.com/yourpath*` 路由，客户端
 
 三个地址字段在一次 XHTTP over CDN 的请求里互相独立：
 
-| 字段                       | 是什么                                 | 谁能看见                    | 决定什么           |
-| -------------------------- | -------------------------------------- | --------------------------- | ------------------ |
-| `address`                | 实际拨号目标                           | 链路上所有人                | 包发到哪个 IP      |
-| `tlsSettings.serverName` | TLS ClientHello 的 SNI                 | 链路上所有人，可用 ECH 加密 | CDN 用哪张证书握手 |
+| 字段                     | 是什么                               | 谁能看见                    | 决定什么           |
+| ------------------------ | ------------------------------------ | --------------------------- | ------------------ |
+| `address`                | 实际拨号目标                         | 链路上所有人                | 包发到哪个 IP      |
+| `tlsSettings.serverName` | TLS ClientHello 的 SNI               | 链路上所有人，可用 ECH 加密 | CDN 用哪张证书握手 |
 | `xhttpSettings.host`     | HTTP Host 头（H2/H3 为`:authority`） | TLS 加密，只有 CDN 能看见   | CDN 回源到哪台机器 |
 
 SNI 与 Host 不一致即域前置；两者是同一 zone 内不同子域即同域域前置。跨 zone 的域前置 CF 已封，同 zone 内没有问题。
 
 以 cf1 为上行门面、cf2 为下行门面、cf3 为共同 Host，三个均橙云、指向同一 VPS：
 
-```json
+```json title="客户端"
 "streamSettings": {
   "method": "xhttp",
   "security": "tls",
@@ -550,7 +553,7 @@ SNI 与 Host 不一致即域前置；两者是同一 zone 内不同子域即同�
 
 #### 上行去程优 + 下行回程优，非对称 XMUX
 
-```json
+```json title="客户端"
 "xhttpSettings": {
   "path": "/yourpath",
   "mode": "stream-up",
@@ -585,7 +588,7 @@ SNI 与 Host 不一致即域前置；两者是同一 zone 内不同子域即同�
 
 #### 上/下行 REALITY 直连 + 下/上行过 CDN
 
-```json
+```json title="服务端"
 {
   "inbounds": [
     // 唯一的 XHTTP 入站，明文，只听本地
@@ -647,7 +650,7 @@ server {
 }
 ```
 
-```json
+```json title="客户端"
 {
   "settings": {
     "address": "你的VPS_IP",
@@ -694,7 +697,7 @@ server {
 
 443 监听 raw + REALITY 入站，REALITY 鉴权失败的流量回落本机 Nginx，由 Nginx 提供伪装站并将 `/yourpath` 反代到内部 XHTTP 入站；REALITY 鉴权通过但首包非法的流量回落到同一个内部 XHTTP 入站：
 
-```json
+```json title="服务端"
 {
   "inbounds": [
     // 内部 XHTTP 入站，监听本地
@@ -749,7 +752,7 @@ XHTTP 的 UUID 只在内部入站校验，几种客户端出站方案共用同�
 
 默认会话 ID、seq 拼在 path，padding 挂 `Referer`，位置都是固定的；[请求混淆](#请求混淆) 的参数能把一条 packet-up 伪装成普通带 cookie 的 GET，请求变成一串没有 body 的 GET：
 
-```json
+```json title="客户端/服务端"
 "xhttpSettings": {
   "path": "/yourpath",
   "mode": "packet-up",
@@ -779,7 +782,7 @@ XHTTP 的 UUID 只在内部入站校验，几种客户端出站方案共用同�
 
 使用真实浏览器的网络栈和 TLS 指纹发起连接，数据经本地 WebSocket 回到 Xray，有一定的性能损耗：
 
-```bash
+```bash title="客户端"
 XRAY_BROWSER_DIALER=127.0.0.1:8080 ./xray -c config.json
 ```
 
@@ -793,7 +796,7 @@ XRAY_BROWSER_DIALER=127.0.0.1:8080 ./xray -c config.json
 
 XHTTP 走 H1/H2 时底层是一条 TCP，可在 `sockopt` 里对它做拥塞控制、握手和多路径调优：
 
-```json
+```json title="客户端"
 "streamSettings": {
   "method": "xhttp",
   "xhttpSettings": { "path": "/yourpath" },
@@ -815,7 +818,7 @@ XHTTP 走 H1/H2 时底层是一条 TCP，可在 `sockopt` 里对它做拥塞控�
 
 ### FinalMask 给 H3 调拥塞控制
 
-```json
+```json title="客户端"
 "streamSettings": {
   "method": "xhttp",
   "xhttpSettings": { "path": "/yourpath" },
@@ -884,21 +887,21 @@ Padding 是可选的参数，仅作用于 1-RTT 以消除握手的长度特征�
 
 服务端、客户端可以设置不同的 padding 参数，按 len、gap 的顺序无限串联，第一个 padding 需概率 100%、至少 35 字节
 
-```go
+```go title="common.go"
 paddingLens = [][3]int{{100, 111, 1111}, {50, 0, 3333}}
 paddingGaps = [][3]int{{75, 0, 111}}
 ```
 
 配置模板：
 
-```json
+```json title="服务端"
 "settings": {
   "users": [{ "id": "你的UUID" }],
   "decryption": "mlkem768x25519plus.native.600s.私钥"
 }
 ```
 
-```json
+```json title="客户端"
 "settings": {
   "address": "优选 IP",
   "port": 443,
@@ -919,7 +922,7 @@ paddingGaps = [][3]int{{75, 0, 111}}
 
 CF 面板开启 ECH 后，客户端在 `tlsSettings` 加 `echConfigList` 即可加密 SNI。格式为 `"域名+DNS服务器"`，服务器支持 `https://`（DoH）、`h2c://`、`udp://` 三种：
 
-```json
+```json title="客户端"
 "tlsSettings": {
   "serverName": "cf1.domain.com",
   "alpn": ["h2"],
