@@ -319,9 +319,11 @@ H2 且要流式上行时显式指定 `mode`（需 CF 面板开 gRPC 支持）：
 ```json title="客户端"
 "xhttpSettings": {
   "path": "/yourpath",
-  "mode": "stream-up"
+  "mode": "stream-up"   // 或 stream-one
 }
 ```
+
+有的 CDN 会限速 stream-one 但不限 stream-up，stream-one 有时还要多开个选项才通（SSE 伪装的锅），遇到断流或降速就换一种模式。
 
 若 CDN 对请求体大小敏感，可调分包节奏：
 
@@ -338,6 +340,10 @@ H2 且要流式上行时显式指定 `mode`（需 CF 面板开 gRPC 支持）：
 客户端连 CF 边缘 IP，SNI 为 cf1，CF 用边缘证书握手，按 Host 回源到 VPS 的端口，验证 Origin 证书后转发给 Xray。
 
 CF 会掐断下行 100 秒无实际数据的 HTTP，代理长连接需应用层保活，比如 sshd 的 `ClientAliveInterval`。
+
+换成 Fastly、Gcore、CloudFront 这些非 CF 的 CDN 时，`trustedXForwardedFor` 要换成对应 CDN 稳定注入的头（Fastly 的 `Fastly-Client-IP`、CloudFront 的 `CloudFront-Viewer-Address`，或让 CDN 自己加一个 `X-Real-IP`），并确认 CDN 把真实客户端 IP 放进了 `X-Forwarded-For`。
+
+Xray 的判定是哨兵头存在就信任 `X-Forwarded-For` 的第一段，`CF-Connecting-IP` 的头 CF 每次回源都带。
 
 ### Nginx 前置（TLS）
 
@@ -381,6 +387,8 @@ Xray 入站：
 
 TLS 在 Nginx 终结，按 path 把 `/yourpath` 以 h2c 转给本地 1234，其余路径当普通网站服务。主动探测看到真网站，TLS 指纹是 Nginx 的而非 Go 的。
 
+握手在 Nginx 上终结，TLS 版本由 Nginx 决定，需要时能退到 TLS 1.，用于规避审查方对来自某些机房的 TLS 1.3 进行阻断的策略。
+
 packet-up 模式下 `grpc_pass` 不适用，改普通反代并关缓冲：
 
 ```nginx
@@ -396,6 +404,39 @@ location /yourpath {
 ```
 
 客户端不出现新块，沿用 [上文](#过-cdntls) 的字段。
+
+Nginx 前置使用 H3，用 Nginx ≥ 1.25 加一个 QUIC 监听即可，回源的 location 不变：
+
+```nginx
+listen 443 quic reuseport;   # H3，需 Nginx ≥ 1.25
+listen 443 ssl;
+http2 on;
+http3 on;
+add_header Alt-Svc 'h3=":443"; ma=86400';
+```
+
+客户端 `alpn` 填 `["h3"]`。
+
+Caddy 默认开启 H3，`reverse_proxy` 到同一个入站即可。
+
+### Cloudflare Worker / Snippet 反代前置
+
+不想让源站域名直接开橙云回源，可以用一段 Worker（或更轻量的 Snippet）把请求改写到后端域名再转发，客户端连的是 Worker 路由绑定的域名：
+
+```js title="Cloudflare Worker"
+export default {
+  async fetch(request) {
+    const url = new URL(request.url);
+    const backends = ["b1.origin.com", "b2.origin.com"]; // 后端域名，多填即随机挑
+    url.hostname = backends[Math.floor(Math.random() * backends.length)];
+    return fetch(new Request(url, request));
+  }
+};
+```
+
+CF 面板里给 Worker 绑一条 `front.domain.com/yourpath*` 路由，客户端 `address`/`serverName`/`host` 指向 `front.domain.com`，path、UUID、padding 原样透传。
+
+前置域名与源站解耦，适用于随机挑后端、给已被阻断的源站套层 CF 或把前置逻辑与回源分开的情况。受 Worker 的 CPU 与子请求配额限制。
 
 ### 上下行分离
 
@@ -435,7 +476,7 @@ location /yourpath {
 
 上行和下行套两家不同的 CDN，或者一个套 CDN、一个直连。例如上行走 CF 的 cf1，下行走另一家 CDN：
 
-```json
+```json title="客户端"
 "streamSettings": {
   "method": "xhttp",
   "security": "tls",
@@ -710,13 +751,17 @@ Xray 把 "连接 `https://cf1.domain.com/yourpath`" 的动作交给页面里的 
 }
 ```
 
-XHTTP H3 无协商机制，用不了 `brutal`，只能用免协商的 `force-brutal`，它强制上行按 `brutalUp` 定速发包。`force-brutal` 和端口跳跃都只对 H3 直连有意义，套 CF 时用不上：CDN 只认标准端口，也不会把定速带到回源段。
+XHTTP H3 无协商机制，用不了 `brutal`，只能用免协商的 `force-brutal`，它强制上行按 `brutalUp` 定速发包。两者都只对 H3 直连有意义。
 
-端口跳跃在 v26.9.9 从 `quicParams.udpHop` 挪到了 `finalmask.udp` 下，字段从 `ports` 改叫 `remotePorts` 且必须填 `mode`（`intervalRemote` 按间隔换远端端口，`intervalLocal` 换本地源端口，`perConnRemote` 每条连接定一次），老写法在新版会被静默丢弃。服务端要让被跳到的整段端口都能到达 QUIC 监听口，一般在 nftables/iptables 把端口段重定向过去。
+不适用套 CDN 的方案。套 CF 时 `force-brutal` 定速的是客户端到对端的 QUIC，到 CF 边缘终止并以 H2/H1 回源；端口跳跃改的是客户端 QUIC 的目标端口，而 CF 边缘只在标准端口接收 QUIC。
+
+端口跳跃在 v26.9.9 从 `quicParams.udpHop` 挪到了 `finalmask.udp` 下，字段从 `ports` 改为 `remotePorts` 且必须显式指定 `mode`（`intervalRemote` 按间隔换远端端口，`intervalLocal` 换本地源端口，`perConnRemote` 每条连接定一次），老写法在新版会被静默丢弃。
+
+服务端要让被跳到的整段端口都能到达 QUIC 监听口，一般在 nftables/iptables 对端口段重定向。
 
 H3 直连默认带着 quic-go 的 Chrome QUIC 指纹（零长 Connection ID），要关掉可在 `quicParams` 里设 `disableChromeParrot`。官方文档不建议服务端裸跑 quic-go H3，更推荐藏在真 Nginx/Caddy 后面。
 
-## 域名与 Cloudflare
+## 域名与 CDN (Cloudflare)
 
 **橙云子域：** CF 代理流量，可做 CDN 优选、域前置、回源目标。
 
@@ -728,7 +773,7 @@ H3 直连默认带着 quic-go 的 Chrome QUIC 指纹（零长 Connection ID）�
 
 CF 面板可以再加一条 Cache Rules，按 CDN 主机名或 XHTTP path 匹配、缓存资格设为绕过（Bypass），虽然 XHTTP 下行本来就不进缓存，但可以预防 CF 版本行为变化。
 
-### 端到端加密（VLESS Encryption）
+### VLESS Encryption
 
 过 CDN 时外层 TLS 终结在 CF 边缘，CF 解密后能看到内层 VLESS 明文。纯 VLESS 自身不加密，能读到明文的不止链路上的第三方，还包括 CF 本身，以及回源段若非 Full (strict) 时 CF 与 VPS 之间的中间人。
 
@@ -801,7 +846,7 @@ CF 面板开启 ECH 后，客户端在 `tlsSettings` 加 `echConfigList` 即可�
 }
 ```
 
-不写域前缀时按 `serverName` 去查；写成 `域名+DNS服务器` 则强制查这个域名的 HTTPS(TYPE65) 记录取 ECHConfig。这次查询本身对该 DNS 服务器是可见的，想彻底不查 DNS 就直接填一段 base64 的 ECHConfigList。
+不写域前缀时按 `serverName` 查询；写成 `域名+DNS服务器` 则强制查这个域名的 HTTPS(TYPE65) 记录取 ECHConfig。查询本身对该 DNS 服务器是可见的，彻底隐藏需使用 base64 的 ECHConfigList。
 
 ### 证书：ACME DNS-01 与 CF Origin CA
 
