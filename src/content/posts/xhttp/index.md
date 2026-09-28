@@ -138,8 +138,6 @@ padding 默认放在 `Referer: /yourpath?x_padding=XXXX...`，这些在 CDN、�
 padding 默认是以 `Referer: /yourpath?x_padding=...` 的形式发出，如果有针对该形式 403 的 CDN/WAF 时优先把 padding 放进 header 尝试。
 :::
 
-另外 Firefox 93+ 在严格追踪保护 / 隐私窗口下会无视 `unsafe-url` 等宽松 referrer 策略并裁掉跨站请求的 `Referer`([Mozilla 安全博客](https://blog.mozilla.org/security/2021/10/05/firefox-93-features-an-improved-smartblock-and-new-referrer-tracking-protections/))，默认把 padding 置于 `Referer` 的 [Browser Dialer](#browser-dialer) 会因此连不上，把 padding 挪到 header 可以解决。
-
 Xray 的思路是不要一次性把手里的牌打完，所以混淆默认关闭，默认值保守。等某个特征真被针对了再使用对应参数，防止过度配置本身成了新特征，所以日常使用保持默认值即可。
 
 ## 客户端 extra 模板
@@ -339,9 +337,7 @@ H2 且要流式上行时显式指定 `mode`（需 CF 面板开 gRPC 支持）：
 }
 ```
 
-有的 CDN 会限速 stream-one 但不限 stream-up，stream-one 有时还要多开个选项才通（SSE 伪装的锅），遇到断流或降速就换一种模式。
-
-若 CDN 对请求体大小敏感，可调分包节奏：
+有的 CDN 会限速 stream-one 但不限 stream-up，遇到断流或降速尝试切换模式或调整混淆参数；若 CDN 对请求体大小敏感，可调分包节奏：
 
 ```json title="客户端"
 "xhttpSettings": {
@@ -353,19 +349,19 @@ H2 且要流式上行时显式指定 `mode`（需 CF 面板开 gRPC 支持）：
 }
 ```
 
-客户端连 CF 边缘 IP，SNI 为 cf1，CF 用边缘证书握手，按 Host 回源到 VPS 的端口，验证 Origin 证书后转发给 Xray。
+客户端连接 CF 边缘 IP，CF 用边缘证书握手，按 Host 回源到 VPS，验证 Origin 证书后转发给 Xray。
 
 CF 会掐断下行 100 秒无实际数据的 HTTP，代理长连接需应用层保活，比如 sshd 的 `ClientAliveInterval`。
 
 换成 Fastly、Gcore、CloudFront 这些非 CF 的 CDN 时，`trustedXForwardedFor` 要换成对应 CDN 稳定注入的头（Fastly 的 `Fastly-Client-IP`、CloudFront 的 `CloudFront-Viewer-Address`，或让 CDN 自己加一个 `X-Real-IP`），并确认 CDN 把真实客户端 IP 放进了 `X-Forwarded-For`。
 
-Xray 的判定是哨兵头存在就信任 `X-Forwarded-For` 的第一段，`CF-Connecting-IP` 的头 CF 每次回源都带。
+Xray 的判定是只要哨兵头存在就信任 `X-Forwarded-For` 的第一段，需确保哨兵头每次回源都带。
 
 常见问题：
 
-1. 套 CDN 后服务端日志报 `invalid x_padding length:0`、请求全被 400。多半是 CDN 把 URL 的 query string 丢了，padding 默认在 `Referer` 的 `?x_padding=` 里（见[请求混淆](#请求混淆)），CDN 一旦不把 query 透传回源，服务端拿到的就是空 padding。例如 CloudFront 的缓存策略默认不带 query string，要在 Cache Policy 里把 query string 设为转发全部。
+1. 套 CDN 后服务端日志报 `invalid x_padding length:0`、请求被 400。多半是 CDN 把 URL 的 query string 丢失，padding 默认在 `Referer` 的 `?x_padding=` 里（见[请求混淆](#请求混淆)），CDN 一旦不把 query 透传回源，服务端拿到的就是空 padding。例如 CloudFront 的缓存策略默认不带 query string，要在 Cache Policy 里把 query string 设为转发全部。
 
-2. CDN 或 WAF 把 `?x_padding=` 当可疑参数拦掉导致 403，请求无法回源。可以把 padding 挪出 URL，开启 `xPaddingObfsMode` 后把 `xPaddingPlacement` 设为 `cookie` 或 `header`，或至少换掉 `xPaddingKey`，做法见[把元数据搬出 URL](#元数据搬出-url)。
+2. CDN 或 WAF 把 `?x_padding=` 当可疑参数拦掉导致 403，请求无法回源。可以把 padding 挪出 URL，开启 `xPaddingObfsMode` 后把 `xPaddingPlacement` 设为 `cookie` 或 `header`，或尝试更改 `xPaddingKey`，做法见[把元数据搬出 URL](#元数据搬出-url)。
 
 ### Nginx 前置（TLS）
 
@@ -409,7 +405,7 @@ Xray 入站：
 
 TLS 在 Nginx 终结，按 path 把 `/yourpath` 以 h2c 转给本地 1234，其余路径当普通网站服务。主动探测看到真网站，TLS 指纹是 Nginx 的而非 Go 的。
 
-握手在 Nginx 上终结，TLS 版本由 Nginx 决定，需要时能退到 TLS 1.，用于规避审查方对来自某些机房的 TLS 1.3 进行阻断的策略。
+握手在 Nginx 上终结，TLS 版本由 Nginx 决定，需要时可回退 TLS 1.2，用于规避审查方对来自某些机房的 TLS 1.3 进行阻断的策略。
 
 packet-up 模式下 `grpc_pass` 不适用，改普通反代并关缓冲：
 
@@ -443,7 +439,7 @@ Caddy 默认开启 H3，`reverse_proxy` 到同一个入站即可。
 
 ### Cloudflare Worker / Snippet 反代前置
 
-不想让源站域名直接开橙云回源，可以用一段 Worker（或更轻量的 Snippet）把请求改写到后端域名再转发，客户端连的是 Worker 路由绑定的域名：
+不想让源站域名直接开橙云回源，可以用 Worker（或更轻量的 Snippet）把请求改写到后端域名再转发，客户端连接 Worker 路由绑定的域名：
 
 ```js title="Cloudflare Worker"
 export default {
@@ -456,13 +452,13 @@ export default {
 };
 ```
 
-CF 面板里给 Worker 绑一条 `front.domain.com/yourpath*` 路由，客户端 `address`/`serverName`/`host` 指向 `front.domain.com`，path、UUID、padding 原样透传。
+CF 面板里给 Worker 绑定 `front.domain.com/yourpath*` 路由，客户端 `address`/`serverName`/`host` 指向 `front.domain.com`，path、UUID、padding 原样透传。
 
-前置域名与源站解耦，适用于随机挑后端、给已被阻断的源站套层 CF 或把前置逻辑与回源分开的情况，受 Worker 的 CPU 与子请求配额限制。
+前置域名与源站解耦，适用于随机挑后端、给已被阻断的源站套层 CF 或希望把前置逻辑与回源分开的情况，受 Worker 的 CPU 与子请求配额限制。
 
 ### Cloudflare Argo 隧道（cloudflared 内网穿透）
 
-前面几种过 CDN 的方案都要求源站有公网 IP、且要监听端口。使用 Argo 隧道允许源站无监听端口，公网 IP 和证书，只需运行 `cloudflared` 主动向 CF 建立仅出站的长连接。
+前面几种过 CDN 的方案都要求源站有公网 IP、且要监听端口。依赖 Argo 隧道允许源站无监听端口，公网 IP 和证书。
 
 适合 NAT VPS、无 DDNS 且只有动态 IPv6 的机器、回源端口受限或源站 IP 无法直连的情况。
 
@@ -481,9 +477,9 @@ XHTTP 入站监听本地明文，由 cloudflared 的 ingress 按域名直接转�
 }
 ```
 
-cloudflared 的固定隧道配置（`~/.cloudflared/config.yml`）：
+cloudflared 的固定隧道配置：
 
-```yaml
+```yaml title="~/.cloudflared/config.yml"
 tunnel: 你的隧道ID
 credentials-file: /home/vpsadmin/.cloudflared/你的隧道ID.json
 protocol: auto # 隧道到 CF 边缘的传输，优先尝试 QUIC(UDP 7844)，异常时自动回落 H2，如已确定 UDP 被封锁、或环境对 QUIC 支持不佳，建议直接指定为 http2
@@ -499,15 +495,15 @@ ingress:
 
 **注意：**
 
-- 必须用固定（命名）隧道，`trycloudflare` 临时隧道不支持 XHTTP，只支持 WS
+- 必须用固定（命名）隧道，`trycloudflare` 临时隧道不支持 XHTTP
 - 回源经隧道只有 H2，TLS 由 CF 边缘和隧道负责，Xray 入站是明文 h2c
-- 一条隧道可按 hostname 分流给多个入站，也能和 Worker 前置叠着用
+- 一条隧道可按 hostname 分流给多个入站，也能和 Worker 前置配合使用
 
 ### 上下行分离
 
 `downloadSettings` 是一套完整的 `streamSettings` 外加 `address`/`port`，`method` 必须为 `"xhttp"`（不可省略），`security` 可为 `"tls"` 或 `"reality"`。
 
-`sockopt` 项也可被分享，但上行 `sockopt` 设 `"penetrate": true` 可覆盖下行，适合打 `mark` 的情况。
+`sockopt` 项也可被分享，上行 `sockopt` 设 `"penetrate": true` 可覆盖下行，适合使用 `mark` 的情况。
 
 #### 同一 CDN：上行 IPv4 H2，下行 IPv6 H3
 
@@ -520,7 +516,7 @@ ingress:
   "tlsSettings": { "serverName": "cf1.domain.com", "fingerprint": "chrome" },
   "xhttpSettings": {
     "path": "/yourpath",
-    "mode": "stream-up",          // 必须：stream-one 只有一个请求，分不开
+    "mode": "stream-up",    // 不能使用 stream-one
     "extra": {
       "downloadSettings": {
         "address": "优选 IPv6",
@@ -535,7 +531,7 @@ ingress:
 }
 ```
 
-客户端随机生成 UUID，上行 `POST /yourpath/UUID` 走 IPv4 的 TCP+TLS+H2 到边缘 IP-A，下行 `GET /yourpath/UUID` 走 IPv6 的 QUIC H3 到边缘 IP-B。两个方向的源 IP、目标 IP、四层协议、HTTP 版本全不同。服务端按 path 中的 UUID 把两半缝合，30 秒内没缝上就终止会话，基于单条连接的检测只能看到半条流。
+客户端随机生成 UUID，上行 `POST /yourpath/UUID` 走 IPv4 的 H2 到边缘 IP-A，下行 `GET /yourpath/UUID` 走 IPv6 的 QUIC H3 到边缘 IP-B。两个方向的源 IP、目标 IP、四层协议、HTTP 版本全不同。服务端按 path 中的 UUID 把两半缝合，30 秒内没缝上就终止会话，基于单条连接的检测只能看到半条流。
 
 #### 上行下行不同 CDN
 
@@ -563,7 +559,7 @@ ingress:
 }
 ```
 
-两家 CDN 都要回源到同一台 VPS 的同一个 XHTTP 入站、`path` 一致，服务端按 UUID 缝合。两个方向所属的 CDN 基础设施不同，任何一方手里都只有半条流。
+两家 CDN 回源到同一台 VPS 的同一个 XHTTP 入站、`path` 一致，服务端按 UUID 缝合。两个方向所属的 CDN 基础设施不同，任何一方手里都只有半条流。
 
 #### 同域域前置
 
@@ -575,7 +571,7 @@ ingress:
 | `tlsSettings.serverName` | TLS ClientHello 的 SNI               | 链路上所有人，可用 ECH 加密 | CDN 用哪张证书握手 |
 | `xhttpSettings.host`     | HTTP Host 头（H2/H3 为`:authority`） | TLS 加密，只有 CDN 能看见   | CDN 回源到哪台机器 |
 
-SNI 与 Host 不一致即域前置；两者是同一 zone 内不同子域即同域域前置。跨 zone 的域前置 CF 已封，同 zone 内没有问题。
+SNI 与 Host 不一致即域前置；两者是同一 zone 内不同子域即同域域前置。跨 zone 的域前置 CF 不支持，同 zone 内没有问题。
 
 以 cf1 为上行门面、cf2 为下行门面、cf3 为共同 Host，三个均橙云、指向同一 VPS：
 
@@ -744,7 +740,7 @@ server {
 }
 ```
 
-上行 `POST /yourpath/UUID` 直连 443，REALITY 鉴权通过后，首包非法流量回落至 127.0.0.1:1234。下行 `GET /yourpath/UUID` 走 CF 的 QUIC H3，CF 回源到 8443 的 Nginx 反代给同一个 127.0.0.1:1234，两方按 UUID 汇合。
+上行直连 443，REALITY 鉴权通过后，首包非法流量回落至 127.0.0.1:1234。下行走 CF 的 QUIC H3，CF 回源到 8443 的 Nginx 反代给同一个 127.0.0.1:1234，两方按 UUID 汇合。
 
 把客户端的上行、下行对调，就是上行过 CDN、下行 REALITY 直连，服务端配置不用改。
 
@@ -799,13 +795,13 @@ server {
 }
 ```
 
-XHTTP 的 UUID 只在内部入站校验，几种客户端出站方案共用同一个 `path` 和 UUID。Nginx 配置参考 [Nginx 前置](#nginx-前置tls)，将监听端口改为8443，并给 `your.domain.com` 留一个 `server_name` 用于主动探测回落。
+XHTTP 的 UUID 只在内部入站校验，几种客户端出站方案共用同一个 `path` 和 UUID。Nginx 配置参考 [Nginx 前置](#nginx-前置tls)，将监听端口改为8443，并给 `your.domain.com` 配置 `server_name` 用于主动探测回落即可。
 
 不能使用 `path` 进行回落，REALITY/TLS 下为 H2，path 提取只解析 H1 的明文请求行，且 XHTTP 会在 path 后追加 UUID 和 seq，H1 下同样无法匹配。
 
 ### 元数据搬出 URL
 
-默认会话 ID、seq 拼在 path，padding 挂 `Referer`，位置都是固定的；[请求混淆](#请求混淆) 的参数能把一条 packet-up 伪装成普通带 cookie 的 GET，请求变成一串没有 body 的 GET：
+默认情况下会话 ID、seq 拼在 path，padding 置于 `Referer`，位置固定；[请求混淆](#请求混淆) 的参数能把 packet-up 伪装成普通带 cookie 的 GET，请求变成一串没有 body 的 GET：
 
 ```json title="客户端/服务端"
 "xhttpSettings": {
@@ -831,9 +827,9 @@ XHTTP 的 UUID 只在内部入站校验，几种客户端出站方案共用同�
 
 `uplinkDataPlacement` 和 `uplinkHTTPMethod` 的 `GET` 仅支持 packet-up 模式，会话 ID 从 UUID 换成 16-24 位的 Base62 串，更像普通 session token。
 
-代价是 cookie 每块只装 2 到 3 KB（`uplinkChunkSize` 可调），上行一大就是一长串 cookie，所以只适合上行小、应对 body 检查的场景。
+代价是 cookie 每块只装 2 到 3 KB（`uplinkChunkSize` 可调），上行一大就是一长串 cookie，所以只适合上行小或应对 body 检查的场景。
 
-下行 GET 的 `Content-Type: text/event-stream` 可由服务端 `noSSEHeader` 去掉；换成 stream-up/one 时，上行的 `application/grpc` 伪装由客户端 `noGRPCHeader` 去掉。
+下行 GET 的 `Content-Type: text/event-stream` 可由服务端配置 `noSSEHeader` 去掉；使用 stream-up/one 时，上行的 `application/grpc` 伪装可由客户端配置 `noGRPCHeader` 去掉。
 
 ### Browser Dialer
 
@@ -848,6 +844,8 @@ XRAY_BROWSER_DIALER=127.0.0.1:8080 ./xray -c config.json
 - `address` 必须是域名，要指定 IP 就改系统 hosts 或内置 DNS
 - `tlsSettings` 将失效，HTTP 版本由浏览器决定，`SNI == host == address`
 - 浏览器到服务端必须直连
+
+Firefox 93+ 在严格追踪保护 / 隐私窗口下会无视 `unsafe-url` 等宽松 referrer 策略并裁掉跨站请求的 `Referer`([Mozilla 安全博客](https://blog.mozilla.org/security/2021/10/05/firefox-93-features-an-improved-smartblock-and-new-referrer-tracking-protections/))，padding 默认置于 `Referer` 会连不上，把 padding 挪到 header 即可以解决。
 
 ### 四层调优（BBR / TFO / MPTCP）
 
@@ -867,9 +865,9 @@ XHTTP 走 H1/H2 时底层是一条 TCP，可在 `sockopt` 里对它做拥塞控�
 
 **注意：**
 
-- `tcpCongestion` 填 `bbr` 前先确认内核支持（`sysctl net.ipv4.tcp_available_congestion_control` 里有 `bbr`），它只改这条连接，要全局启用需要 `sysctl` 设 `net.core.default_qdisc=fq` 和 `net.ipv4.tcp_congestion_control=bbr`
+- `tcpCongestion` 填 `bbr` 前先确认内核支持（`sysctl net.ipv4.tcp_available_congestion_control` 里有 `bbr`），`sockopt` 只改本条连接，全局启用需要 `sysctl` 设置 `net.core.default_qdisc=fq` 和 `net.ipv4.tcp_congestion_control=bbr`
 - `tcpMptcp` 需要 Linux 5.6+ 且 `net.mptcp.enabled=1`，客户端所在系统也要支持，只开一端等于没开
-- `tcpFastOpen` 也可以填队列长度（整数）而非 `true`，但要客户端、服务端、中间盒都放行才生效，任一环节失败回退普通握手
+- `tcpFastOpen` 也可以填队列长度（整数），需客户端、服务端、中间盒都放行，任一环节失败回退普通握手
 - 过 CDN 时客户端到 CF 边缘的握手由 CF 决定，`sockopt` 只对 CF 回源段、直连与自建反代链路有意义
 - 上下行分离时上行、下行各有各的 `sockopt`；上行设 `"penetrate": true` 可覆盖下行，见[上下行分离](#上下行分离)
 
@@ -896,9 +894,13 @@ XHTTP H3 无协商机制，不支持 `brutal`，只能用免协商的 `force-bru
 
 不适用套 CDN 的方案。套 CF 时 `force-brutal` 定速的是客户端到对端的 QUIC，到 CF 边缘终止并以 H2/H1 回源；端口跳跃改的是客户端 QUIC 的目标端口，而 CF 边缘只在标准端口接收 QUIC。
 
-端口跳跃在 v26.9.9 从 `quicParams.udpHop` 挪到了 `finalmask.udp` 下，字段从 `ports` 改为 `remotePorts` 且必须显式指定 `mode`（`intervalRemote` 按间隔换远端端口，`intervalLocal` 换本地源端口，`perConnRemote` 每条连接定一次），老写法在新版会被静默丢弃。
+端口跳跃在 v26.9.9 从 `quicParams.udpHop` 挪到了 `finalmask.udp` 下，字段从 `ports` 改为 `remotePorts` 且必须显式指定 `mode`：
 
-服务端要让被跳到的整段端口都能到达 QUIC 监听口，一般在 nftables/iptables 对端口段重定向。
+- `intervalRemote`：周期换远端端口，底层 socket 和本地源端口不动，最经典的端口跳跃
+- `intervalLocal`：周期换本地源端口，跳跃点新开本地 UDP socket
+- `perConnRemote`：每条连接定一次，之后整条连接固定不变
+
+老写法在新版会被静默丢弃；服务端要让被跳到的整段端口都能到达 QUIC 监听端口，一般在 nftables/iptables 对端口段进行重定向。
 
 H3 直连默认带着 quic-go 的 Chrome QUIC 指纹（零长 Connection ID），要关掉可在 `quicParams` 里设 `disableChromeParrot`。官方文档不建议服务端裸跑 quic-go H3，更推荐藏在真 Nginx/Caddy 后面。
 
@@ -991,7 +993,7 @@ CF 面板开启 ECH 后，客户端在 `tlsSettings` 加 `echConfigList` 即可�
 
 ### 证书：ACME DNS-01 与 CF Origin CA
 
-cf1/cf2 同属一个 zone，签一张 `*.domain.com`（可加主域）的通配符即可，Nginx 的 `server_name` 分流也能各自匹配上。
+cf1/cf2 同属一个 zone，签一张 `*.domain.com`（可加主域）的通配符即可：
 
 |          | ACME + DNS-01          | Origin CA            |
 | -------- | ---------------------- | -------------------- |
