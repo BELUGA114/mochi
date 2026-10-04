@@ -88,8 +88,6 @@ GEOLOCATION-!CN   domain:c.pki.goog
 
 很多内核都有这么个机制：把某批域名交给某个解析器，同时给返回结果加一个条件，不满足就换下一个解析器，Xray 里对应的字段是 `expectedIPs`。
 
-它很容易被读成「让这些域名解析出符合条件的 IP」，实际上它只是个过滤器，解析器返回什么它就在里面挑，不合条件的地址丢掉，全丢完了就回落到下一台。
-
 麻烦的是错误答案本身就满足过滤条件的时候，过滤器根本不会动。`www.gstatic.com` 从境内解析器拿到的是 Google 的大陆段，如果过滤器是 `expectedIPs: ["geoip:cn"]` 会顺利通过，结果和按 `geosite:cn` 分流一模一样，只是成因换了。
 
 :::warning[`finalQuery` 和 `expectedIPs` 不要一起开]
@@ -100,19 +98,9 @@ Xray 的 `finalQuery` 为真的时候后面的解析器不再参与，而过滤�
 
 Xray 构建解析器列表的顺序是：命中 `domains` 条件的解析器按配置顺序排在前面，其余没标 `skipFallback` 的按配置顺序追加，第一个产出非空结果的解析器终止查询。所以只要把精确列表挂在一个不带过滤的解析器上并排在宽列表之前，过滤和截断都用不着出现。
 
-<iframe
-  src="https://mermaideditor.com/embed?code=Z3JhcGglMjBURCUwQSUyMCUyMCUyMCUyMEElNUIlMjIlRTglQUYlQjclRTYlQjElODIlRTUlOUYlOUYlRTUlOTAlOEQlMjIlNUQlMjAtLSUzRSUyMEIlN0IlMjIlRTUlOTElQkQlRTQlQjglQUQlRTclQjIlQkUlRTclQTElQUUlRTglQTElQTglMjIlN0QlMEElMjAlMjAlMjAlMjBCJTIwLS0lM0UlN0MlMjIlRTYlOTglQUYlMjIlN0MlMjBDJTVCJTIyJUU4JUFGJUE1JUU4JUExJUE4JUU1JUFGJUI5JUU1JUJBJTk0JUU3JTlBJTg0JUU4JUE3JUEzJUU2JTlFJTkwJUU1JTk5JUE4JTJDJTIwJUU0JUI4JThEJUU1JThBJUEwJUU4JUJGJTg3JUU2JUJCJUE0JTIyJTVEJTBBJTIwJTIwJTIwJTIwQyUyMC0tJTNFJTIwWiU1QiUyMiVFOCVCRiU5NCVFNSU5QiU5RSUyQyUyMCVFNSU4OCVBNCVFNSVBRSU5QSVFNyVCQiU5MyVFNiU5RCU5RiUyMiU1RCUwQSUyMCUyMCUyMCUyMEIlMjAtLSUzRSU3QyUyMiVFNSU5MCVBNiUyMiU3QyUyMEQlN0IlMjIlRTUlOTElQkQlRTQlQjglQUQlRTUlQUUlQkQlRTglQTElQTglMjIlN0QlMEElMjAlMjAlMjAlMjBEJTIwLS0lM0UlN0MlMjIlRTYlOTglQUYlMjIlN0MlMjBFJTVCJTIyJUU4JUFGJUE1JUU4JUExJUE4JUU1JUFGJUI5JUU1JUJBJTk0JUU3JTlBJTg0JUU4JUE3JUEzJUU2JTlFJTkwJUU1JTk5JUE4JTIyJTVEJTBBJTIwJTIwJTIwJTIwRSUyMC0tJTNFJTIwRiU3QiUyMiVFNyVCQiU5MyVFNiU5RSU5QyVFOSU4MCU5QSVFOCVCRiU4NyVFOCVCRiU4NyVFNiVCQiVBNCVFNiU5RCVBMSVFNCVCQiVCNiUyMiU3RCUwQSUyMCUyMCUyMCUyMEYlMjAtLSUzRSU3QyUyMiVFNiU5OCVBRiUyMiU3QyUyMFolMEElMjAlMjAlMjAlMjBGJTIwLS0lM0UlN0MlMjIlRTglQkYlODclRTYlQkIlQTQlRTUlOTAlOEUlRTQlQjglQkElRTclQTklQkElMjIlN0MlMjBHJTVCJTIyJUU1JTlCJTlFJUU4JTkwJUJEJTIyJTVEJTBBJTIwJTIwJTIwJTIwRCUyMC0tJTNFJTdDJTIyJUU1JTkwJUE2JTIyJTdDJTIwRyUwQSUyMCUyMCUyMCUyMEclMjAtLSUzRSUyMEglNUIlMjIlRTUlODUlOUMlRTUlQkElOTUlRTglQTclQTMlRTYlOUUlOTAlRTUlOTklQTglMkMlMjAlRTQlQjglOEQlRTUlOEElQTAlRTglQkYlODclRTYlQkIlQTQlMjIlNUQlMEElMjAlMjAlMjAlMjBIJTIwLS0lM0UlMjBa&theme=neutral"
-  width="100%"
-  height="650"
-  frameborder="0"
-  style="border-radius:8px;overflow:hidden"
-></iframe>
-
 :::caution[`enableParallelQuery` 会破坏这里依赖的顺序语义]
 这套做法整个建立在顺序语义上。Xray 的 `enableParallelQuery` 打开之后会改成按分组并发，相邻且 `clientIP`、`skipFallback`、`queryStrategy`、`tag`、`domains`、过滤条件全都相同的服务器合成一组，组内谁先成功就用谁的地址，只有组间才按顺序回落。开了它，前面那一条就不一定排得到前面去，两个别一起用。
 :::
-
-客户端上这个策略同样有用，也是大多数人最熟悉的，只是方向反过来。想让 Steam 的下载走直连，商店和社区走代理，做法是把 `steam@cn` 排在 `steam` 前面；想让 `gstatic.com` 直连而 `google.com` 走代理，做法是把 `google-cn` 排在 `google` 前面。都是让精确表排在前面把域名截走，都用不着写单个域名的例外。
 
 ### 换一份为这个问题建的表
 
@@ -122,10 +110,10 @@ dnsmasq-china-list 要回答的问题是「哪些域名用境内解析器解析�
 
 换了表之后，还得挑出哪些域名要在精确表里单列，比如 OCSP 域名的收录情况就不一样：
 
-- `ocsp.globalsign.com`，`cn` 和 `china-list` 都收，必须单列。
-- `c.pki.goog`，`cn` 收（`full:c.pki.goog`）而 `china-list` 不收，换表就够了，留着是防以后漂移。
+- `ocsp.globalsign.com`，`cn` 和 `china-list` 都，必须单列。
+- `c.pki.goog`，`cn` 包含（`full:c.pki.goog`）而 `china-list` 不包含。
 
-要不要单独处理 OCSP 还得看客户端。Chrome 对叶证书不做在线 OCSP，走的是 CRLSets，Let's Encrypt 也在 2025 年停掉了 OCSP 服务并从证书里移除了 OCSP URL；但 Windows 和 Safari 还是会查，在那些客户端上它确实卡在 TLS 握手的关键路径上，一秒的境内解析加一跳绕行是能感觉到的。
+要不要单独处理 OCSP 需要取舍。Chrome 对叶证书不做在线 OCSP，走的是 CRLSets，Let's Encrypt 也在 2025 年停掉了 OCSP 服务并从证书里移除了 OCSP URL；但 Windows 和 Safari 还是会查，这类客户端上它确实卡在 TLS 握手的关键路径上，一秒的境内解析加一跳绕行是能感觉到的。
 
 ### 设 ECS 防的是哪一种暴露
 
@@ -175,9 +163,9 @@ dnsmasq-china-list 要回答的问题是「哪些域名用境内解析器解析�
 }
 ```
 
-## 应用层判定的两个漏洞
+## 应用层判定漏洞
 
-前面所有判定都在应用层，而应用层有两个漏洞绕不开。
+前面所有判定都在应用层，而应用层有两个漏洞：
 
 1. `IPIfNonMatch` 下的一个域名解析出多个地址时，每条 IP 规则会拿全部地址去试，任一命中就算命中。例如 `www.bilibili.com` 一次返回 20 个地址，只要其中一个满足 `expectedIPs: ["geoip:cn"]`，整条连接就走保守侧，而实际建连用的可能是另一个地址：
 

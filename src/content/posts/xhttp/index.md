@@ -1,7 +1,7 @@
 ---
 title: XHTTP 原理、配置字段与玩法
 published: 2026-08-13
-description: 对 XHTTP 官方文档和社区讨论以及源码的研读与实践：三种模式、XMUX 与请求混淆的取舍，过 CF 与 Nginx 前置以及上下行分离、REALITY 混搭等玩法。
+description: 对 XHTTP 官方文档和社区讨论以及源码的研读与实践：三种模式、XMUX 与请求混淆的取舍，过 CF 与 Nginx 前置以及上下行分离、Browser Dialer、FinalMask 混搭等玩法。
 image: ""
 tags: [VPS, Xray, XHTTP, REALITY, Cloudflare]
 category: 网络
@@ -130,15 +130,15 @@ padding 默认放在 `Referer: /yourpath?x_padding=XXXX...`，这些在 CDN、�
 
 `scMaxEachPostBytes` 是单向约束，客户端按自己的值分包，服务端只拿自己的 `To` 做上限，不小于客户端即可。
 
+padding 默认是以 `Referer: /yourpath?x_padding=...` 的形式发出，如果 CDN/WAF 针对该形式 403 时优先把 padding 放进 header 尝试。
+
 :::note[混淆参数随着封锁逐步加入]
-最先是 CDNVideo 只要请求包含 `x_padding=XXXXX` 参数，就会抛出 403([issue #4346](https://github.com/XTLS/Xray-core/issues/4346#issuecomment-3545201732))，于是有了换键名、换字符表（`tokenish`）和挪位置。
+最先是 CDNVideo 只要请求包含 `x_padding=XXXXX` 参数，就抛出 403([issue #4346](https://github.com/XTLS/Xray-core/issues/4346#issuecomment-3545201732))，于是有了换键名、换字符表（`tokenish`）和挪位置。
 
 接着 Yandex Cloud、VK Cloud 等禁掉 POST（[Yandex 文档](https://yandex.cloud/en/docs/cdn/operations/resources/configure-http)），于是 `uplinkHTTPMethod` 允许改用 PUT、PATCH；再往后有 CDN 按 UUID 的 `8-4-4-4-12` 形状封 session ID（[issue #6264](https://github.com/XTLS/Xray-core/issues/6264)），于是 `sessionIDTable`、`sessionIDLength` 能将其伪装成普通 token。
-
-padding 默认是以 `Referer: /yourpath?x_padding=...` 的形式发出，如果有针对该形式 403 的 CDN/WAF 时优先把 padding 放进 header 尝试。
 :::
 
-Xray 的思路是不要一次性把手里的牌打完，所以混淆默认关闭，默认值保守。等某个特征真被针对了再使用对应参数，防止过度配置本身成了新特征，所以日常使用保持默认值即可。
+Xray 的思路是不应把手里的牌一下子打完([issue #19](https://github.com/XTLS/BBS/issues/19))，所以混淆默认关闭且默认值保守，等某个特征真被针对了再使用对应参数，防止过度配置本身成了新特征，日常使用保持默认值即可。
 
 ## 客户端 extra 模板
 
@@ -183,7 +183,7 @@ Xray 的思路是不要一次性把手里的牌打完，所以混淆默认关闭
 
 **注意：**
 
-- `downloadSettings.xhttpSettings` 里也可写 `extra`，与上行的 `extra` 完全一致，[XMUX](#xmux) 和[请求混淆](#请求混淆)两节介绍的字段与规则全部适用
+- `downloadSettings.xhttpSettings` 里也可写 `extra`，与上行的 `extra` 完全一致，XMUX 和请求混淆的字段与规则全部适用
 - **下行配置不继承上行的任何配置**，XMUX 参数 roll 出的具体数也是各自独立随机的，随时间推移上下行复用完全不对称
 - 数据放 header 时要相应调大 `serverMaxHeaderBytes`（如 16384，过 CDN 还要留意中间盒的请求头上限）
 - `tokenish` 生成随机 Base62 串，按 HPACK huffman 编码后长度落在 `xPaddingBytes` 区间内，服务端校验同样按 huffman 长度算，比一串 `X` 更像真实数据
@@ -284,7 +284,7 @@ XTLS/Vision 只在 TCP+TLS/REALITY 下可用：
 
 ### 过 CDN（TLS）
 
-前提：cf1.domain.com 开橙云、CF 面板 SSL 模式为 Full (strict)，服务端持证书。
+cf1.domain.com 开启橙云、CF 面板 SSL 模式为 Full (strict)，服务端持证书。
 
 ```json title="服务端"
 "streamSettings": {
@@ -322,13 +322,13 @@ XTLS/Vision 只在 TCP+TLS/REALITY 下可用：
 }
 ```
 
-H3 版只改一处 `alpn`：
+使用 H3 需显式指定 `alpn`：
 
 ```json title="客户端"
 "tlsSettings": { "serverName": "cf1.domain.com", "alpn": ["h3"], "fingerprint": "chrome" }
 ```
 
-H2 且要流式上行时显式指定 `mode`（需 CF 面板开 gRPC 支持）：
+使用 H2 且要流式上行时显式指定 `mode`（需 CF 面板开 gRPC 支持）：
 
 ```json title="客户端"
 "xhttpSettings": {
@@ -343,7 +343,7 @@ H2 且要流式上行时显式指定 `mode`（需 CF 面板开 gRPC 支持）：
 "xhttpSettings": {
   "path": "/yourpath",
   "extra": {
-    "scMaxEachPostBytes": "500000-1000000",   // 要小于 CDN 允许的最大请求体
+    "scMaxEachPostBytes": "500000-1000000",   // 需小于 CDN 允许的最大请求体
     "scMinPostsIntervalMs": "10-50"
   }
 }
@@ -351,21 +351,19 @@ H2 且要流式上行时显式指定 `mode`（需 CF 面板开 gRPC 支持）：
 
 客户端连接 CF 边缘 IP，CF 用边缘证书握手，按 Host 回源到 VPS，验证 Origin 证书后转发给 Xray。
 
-CF 会掐断下行 100 秒无实际数据的 HTTP，代理长连接需应用层保活，比如 sshd 的 `ClientAliveInterval`。
+CF 会掐断下行 100 秒无实际数据的 HTTP，代理长连接需应用层保活，比如使用 sshd 的 `ClientAliveInterval`。
 
-换成 Fastly、Gcore、CloudFront 这些非 CF 的 CDN 时，`trustedXForwardedFor` 要换成对应 CDN 稳定注入的头（Fastly 的 `Fastly-Client-IP`、CloudFront 的 `CloudFront-Viewer-Address`，或让 CDN 自己加一个 `X-Real-IP`），并确认 CDN 把真实客户端 IP 放进了 `X-Forwarded-For`。
-
-Xray 的判定是只要哨兵头存在就信任 `X-Forwarded-For` 的第一段，需确保哨兵头每次回源都带。
+对于 Fastly、Gcore、CloudFront 这类非 CF 的 CDN 时，`trustedXForwardedFor` 需使用对应 CDN 每次回源都稳定携带的头（比如Fastly 的 `Fastly-Client-IP`，CloudFront 的 `CloudFront-Viewer-Address`），并确认 CDN 把真实客户端 IP 放进了 `X-Forwarded-For`。
 
 常见问题：
 
-1. 套 CDN 后服务端日志报 `invalid x_padding length:0`、请求被 400。多半是 CDN 把 URL 的 query string 丢失，padding 默认在 `Referer` 的 `?x_padding=` 里（见[请求混淆](#请求混淆)），CDN 一旦不把 query 透传回源，服务端拿到的就是空 padding。例如 CloudFront 的缓存策略默认不带 query string，要在 Cache Policy 里把 query string 设为转发全部。
+1. 服务端日志报 `invalid x_padding length:0`、请求被 400。优先考虑是 CDN 未将 URL 的 query string 透传回源，例如 CloudFront 的缓存策略默认不带 query string，需在 Cache Policy 里把 query string 设为转发全部。
 
-2. CDN 或 WAF 把 `?x_padding=` 当可疑参数拦掉导致 403，请求无法回源。可以把 padding 挪出 URL，开启 `xPaddingObfsMode` 后把 `xPaddingPlacement` 设为 `cookie` 或 `header`，或尝试更改 `xPaddingKey`，做法见[把元数据搬出 URL](#元数据搬出-url)。
+2. CDN 或 WAF 识别并拦截 `?x_padding=` 导致 403，请求无法回源。考虑把 padding 挪出 URL，开启 `xPaddingObfsMode` 后把 `xPaddingPlacement` 设为 `cookie` 或 `header`，或尝试更改 `xPaddingKey`，做法见 [把元数据搬出 URL](#元数据搬出-url)。
 
 ### Nginx 前置（TLS）
 
-Nginx 拿走 443（持真证书），XHTTP 入站监听本地明文：
+Nginx 持真证书监听 443，XHTTP 入站监听本地明文：
 
 ```nginx
 server {
@@ -403,11 +401,11 @@ Xray 入站：
 }
 ```
 
-TLS 在 Nginx 终结，按 path 把 `/yourpath` 以 h2c 转给本地 1234，其余路径当普通网站服务。主动探测看到真网站，TLS 指纹是 Nginx 的而非 Go 的。
+TLS 在 Nginx 终结，按 path 把 `/yourpath` 以 h2c 转发本地 1234，其余路径当普通网站服务。防御主动探测，TLS 指纹是 Nginx 的而非 Go 的。
 
-握手在 Nginx 上终结，TLS 版本由 Nginx 决定，需要时可回退 TLS 1.2，用于规避审查方对来自某些机房的 TLS 1.3 进行阻断的策略。
+TLS 版本由 Nginx 决定，特殊情况可回退 TLS 1.2，用于规避审查方对来自某些机房的 TLS 1.3 进行阻断的策略。
 
-packet-up 模式下 `grpc_pass` 不适用，改普通反代并关缓冲：
+packet-up 模式下 `grpc_pass` 不适用，更换普通反代并关闭缓冲：
 
 ```nginx
 location /yourpath {
@@ -423,7 +421,7 @@ location /yourpath {
 
 客户端不出现新块，沿用 [上文](#过-cdntls) 的字段。
 
-Nginx 前置使用 H3，用 Nginx ≥ 1.25 加一个 QUIC 监听即可，回源的 location 不变：
+如需使用 H3，使用 Nginx ≥ 1.25 并监听 QUIC 即可，回源的 location 不变：
 
 ```nginx
 listen 443 quic reuseport;   # H3，需 Nginx ≥ 1.25
@@ -433,7 +431,7 @@ http3 on;
 add_header Alt-Svc 'h3=":443"; ma=86400';
 ```
 
-客户端 `alpn` 填 `["h3"]`。
+客户端 `alpn` 指定 `["h3"]`。
 
 Caddy 默认开启 H3，`reverse_proxy` 到同一个入站即可。
 
@@ -477,7 +475,7 @@ XHTTP 入站监听本地明文，由 cloudflared 的 ingress 按域名直接转�
 }
 ```
 
-cloudflared 的固定隧道配置：
+cloudflared 固定隧道配置：
 
 ```yaml title="~/.cloudflared/config.yml"
 tunnel: 你的隧道ID
@@ -491,12 +489,12 @@ ingress:
   - service: http_status:404
 ```
 
-客户端沿用[过 CDN（TLS）](#过-cdntls)的字段，`serverName` 与 `host` 填隧道绑定的 `cf1.domain.com`。
+客户端沿用 [过 CDN（TLS）](#过-cdntls) 的字段，`serverName` 与 `host` 填隧道绑定的 `cf1.domain.com`。
 
 **注意：**
 
 - 必须用固定（命名）隧道，`trycloudflare` 临时隧道不支持 XHTTP
-- 回源经隧道只有 H2，TLS 由 CF 边缘和隧道负责，Xray 入站是明文 h2c
+- 回源经隧道只有 H2，TLS 由 CF 边缘和隧道负责，Xray 入站明文 h2c
 - 一条隧道可按 hostname 分流给多个入站，也能和 Worker 前置配合使用
 
 ### 上下行分离
@@ -505,7 +503,7 @@ ingress:
 
 `sockopt` 项也可被分享，上行 `sockopt` 设 `"penetrate": true` 可覆盖下行，适合使用 `mark` 的情况。
 
-#### 同一 CDN：上行 IPv4 H2，下行 IPv6 H3
+#### 同一 CDN 上行 IPv4 H2，下行 IPv6 H3
 
 只改客户端：
 
@@ -531,11 +529,11 @@ ingress:
 }
 ```
 
-客户端随机生成 UUID，上行 `POST /yourpath/UUID` 走 IPv4 的 H2 到边缘 IP-A，下行 `GET /yourpath/UUID` 走 IPv6 的 QUIC H3 到边缘 IP-B。两个方向的源 IP、目标 IP、四层协议、HTTP 版本全不同。服务端按 path 中的 UUID 把两半缝合，30 秒内没缝上就终止会话，基于单条连接的检测只能看到半条流。
+客户端随机生成 UUID，上行 `POST /yourpath/UUID` 走 IPv4 的 H2 到边缘 IP-A，下行 `GET /yourpath/UUID` 走 IPv6 的 QUIC H3 到边缘 IP-B。两个方向的源 IP、目标 IP、四层协议、HTTP 版本均不同。服务端按 UUID 把两半缝合，30 秒内没缝上就终止会话，基于单条连接的检测只能看到半条流。
 
 #### 上行下行不同 CDN
 
-上行和下行套两家不同的 CDN，或者一个套 CDN、一个直连。例如上行套 CF，下行套另一家 CDN：
+上行和下行使用两家不同的 CDN。例如上行套 CF，下行套另一家 CDN：
 
 ```json title="客户端"
 "streamSettings": {
@@ -547,7 +545,7 @@ ingress:
     "mode": "stream-up",
     "extra": {
       "downloadSettings": {
-        "address": "另一家 CDN 的优选 IP",
+        "address": "另一家 CDN 的 IP",
         "port": 443,
         "method": "xhttp",
         "security": "tls",
@@ -559,7 +557,7 @@ ingress:
 }
 ```
 
-两家 CDN 回源到同一台 VPS 的同一个 XHTTP 入站、`path` 一致，服务端按 UUID 缝合。两个方向所属的 CDN 基础设施不同，任何一方手里都只有半条流。
+两家 CDN 按 SNI 回源到同一台 VPS 的同一个 XHTTP 入站、`path` 一致，按 UUID 缝合。两个方向所属的 CDN 基础设施不同，任何一方手里都只有半条流。
 
 #### 同域域前置
 
@@ -571,9 +569,9 @@ ingress:
 | `tlsSettings.serverName` | TLS ClientHello 的 SNI               | 链路上所有人，可用 ECH 加密 | CDN 用哪张证书握手 |
 | `xhttpSettings.host`     | HTTP Host 头（H2/H3 为`:authority`） | TLS 加密，只有 CDN 能看见   | CDN 回源到哪台机器 |
 
-SNI 与 Host 不一致即域前置；两者是同一 zone 内不同子域即同域域前置。跨 zone 的域前置 CF 不支持，同 zone 内没有问题。
+SNI 与 Host 不一致即域前置，两者是同一 zone 内不同子域即同域域前置。主流商业级 CDN 均已全面禁止未经授权的跨 zone 域前置，所以采用同域域前置。
 
-以 cf1 为上行门面、cf2 为下行门面、cf3 为共同 Host，三个均橙云、指向同一 VPS：
+cf1 上行、cf2 下行，cf3 为共同 Host，均开启橙云并指向同一 VPS：
 
 ```json title="客户端"
 "streamSettings": {
@@ -598,9 +596,9 @@ SNI 与 Host 不一致即域前置；两者是同一 zone 内不同子域即同�
 }
 ```
 
-两条 TLS 握手 SNI 分别是 cf1 和 cf2，两个方向的 Host 都是 cf3，CF 按 cf3 回源到你的 VPS。
+两条 TLS 握手 SNI 分别是 cf1 和 cf2，两个方向的 Host 都是 cf3，CF 按 cf3 回源。
 
-当 cf1 和 cf2 橙云均指向同一台 VPS 时，不填 `host` 也可以，各方向 Host 跟着自己的 SNI 走，CF 回源到同一台机器同一 path，照样按 UUID 缝合。需要 `host` 的场景：源站前有 Nginx 按 `server_name` 分流、只想为一个域名配回源规则、或想让两个方向走完全一样的回源逻辑。
+当 cf1 和 cf2 橙云均指向同一台 VPS 时，不填 `host` 也可以，各方向按 SNI 回源至同一台机器同一 path，按 UUID 缝合。需要 `host` 的场景：源站前有 Nginx 按 `server_name` 分流、只想为一个域名配回源规则、或想让两个方向走完全一样的回源逻辑。
 
 #### 上行去程优 + 下行回程优，非对称 XMUX
 
@@ -642,7 +640,7 @@ SNI 与 Host 不一致即域前置；两者是同一 zone 内不同子域即同�
 ```json title="服务端"
 {
   "inbounds": [
-    // 唯一的 XHTTP 入站，明文，只听本地
+    // XHTTP 明文入站，监听本地
     {
       "listen": "127.0.0.1",
       "port": 1234,
@@ -654,7 +652,7 @@ SNI 与 Host 不一致即域前置；两者是同一 zone 内不同子域即同�
         "sockopt": { "trustedXForwardedFor": ["CF-Connecting-IP"] }
       }
     },
-    // 入口 A：REALITY 前门，监听 443，非法 VLESS 首包回落到 1234
+    // 入口 A：REALITY 监听 443，非法 VLESS 首包回落到 1234
     {
       "listen": "0.0.0.0",
       "port": 443,
@@ -740,7 +738,7 @@ server {
 }
 ```
 
-上行直连 443，REALITY 鉴权通过后，首包非法流量回落至 127.0.0.1:1234。下行走 CF 的 QUIC H3，CF 回源到 8443 的 Nginx 反代给同一个 127.0.0.1:1234，两方按 UUID 汇合。
+上行直连 443，REALITY 鉴权通过后，首包非法流量回落至 127.0.0.1:1234。下行走 CF 的 QUIC H3，CF 回源到 8443 的 Nginx 反代给同一个 127.0.0.1:1234。
 
 把客户端的上行、下行对调，就是上行过 CDN、下行 REALITY 直连，服务端配置不用改。
 
@@ -827,7 +825,7 @@ XHTTP 的 UUID 只在内部入站校验，几种客户端出站方案共用同�
 
 `uplinkDataPlacement` 和 `uplinkHTTPMethod` 的 `GET` 仅支持 packet-up 模式，会话 ID 从 UUID 换成 16-24 位的 Base62 串，更像普通 session token。
 
-代价是 cookie 每块只装 2 到 3 KB（`uplinkChunkSize` 可调），上行一大就是一长串 cookie，所以只适合上行小或应对 body 检查的场景。
+cookie 每块只装 2 到 3 KB（`uplinkChunkSize` 可调），上行一大就是一长串 cookie，所以只适合上行小或应对 body 检查的场景。
 
 下行 GET 的 `Content-Type: text/event-stream` 可由服务端配置 `noSSEHeader` 去掉；使用 stream-up/one 时，上行的 `application/grpc` 伪装可由客户端配置 `noGRPCHeader` 去掉。
 
@@ -865,11 +863,11 @@ XHTTP 走 H1/H2 时底层是一条 TCP，可在 `sockopt` 里对它做拥塞控�
 
 **注意：**
 
-- `tcpCongestion` 填 `bbr` 前先确认内核支持（`sysctl net.ipv4.tcp_available_congestion_control` 里有 `bbr`），`sockopt` 只改本条连接，全局启用需要 `sysctl` 设置 `net.core.default_qdisc=fq` 和 `net.ipv4.tcp_congestion_control=bbr`
+- `tcpCongestion` 使用 `bbr` 前先确认内核支持，`sockopt` 只改这条连接，全局启用需要 `sysctl` 设置 `net.core.default_qdisc=fq` 和 `net.ipv4.tcp_congestion_control=bbr`
 - `tcpMptcp` 需要 Linux 5.6+ 且 `net.mptcp.enabled=1`，客户端所在系统也要支持，只开一端等于没开
 - `tcpFastOpen` 也可以填队列长度（整数），需客户端、服务端、中间盒都放行，任一环节失败回退普通握手
 - 过 CDN 时客户端到 CF 边缘的握手由 CF 决定，`sockopt` 只对 CF 回源段、直连与自建反代链路有意义
-- 上下行分离时上行、下行各有各的 `sockopt`；上行设 `"penetrate": true` 可覆盖下行，见[上下行分离](#上下行分离)
+- 上下行分离时上行、下行各有各的 `sockopt`；上行设 `"penetrate": true` 可覆盖下行
 
 ### FinalMask 给 H3 调拥塞控制
 
@@ -904,21 +902,23 @@ XHTTP H3 无协商机制，不支持 `brutal`，只能用免协商的 `force-bru
 
 H3 直连默认带着 quic-go 的 Chrome QUIC 指纹（零长 Connection ID），要关掉可在 `quicParams` 里设 `disableChromeParrot`。官方文档不建议服务端裸跑 quic-go H3，更推荐藏在真 Nginx/Caddy 后面。
 
-## 域名与 CDN (Cloudflare)
+## CDN 相关
 
-**橙云子域：** CF 代理流量，可做 CDN 优选、域前置、回源目标。
+### Cloudflare
 
-**灰云子域：** CF 只做 DNS 解析、不代理，只有灰云才能解析出真实 IP，适合给直连节点当 `address`。
+橙云子域：CF 代理流量，可做 CDN 优选、域前置、回源目标。
+
+灰云子域：CF 只做 DNS 解析、不代理，只有灰云才能解析出真实 IP，适合给直连节点当 `address`。
 
 当面板 SSL 模式为 Flexible 时，CF 回源走明文 HTTP，建议使用 Full (strict) 并配证书。
 
 回源端口需要是 [Cloudflare 支持的端口](https://developers.cloudflare.com/fundamentals/reference/network-ports/)，非标端口（比如 10086）需使用 Origin Rule 重写回源端口。
 
-CF 面板可以再加一条 Cache Rules，按 CDN 主机名或 XHTTP path 匹配、缓存资格设为绕过（Bypass），虽然 XHTTP 下行本来就不进缓存，但可以预防 CF 版本行为变化。
+CF 面板可选设置 Cache Rules，按 CDN 主机名或 XHTTP path 匹配、缓存资格设为绕过（Bypass），虽然 XHTTP 下行本来就不进缓存，但可以预防 CF 版本行为变化。
 
 ### VLESS Encryption
 
-过 CDN 时外层 TLS 终结在 CF 边缘，CF 解密后能看到内层 VLESS 明文。纯 VLESS 自身不加密，能读到明文的不止链路上的第三方，还包括 CF 本身，以及回源段若非 Full (strict) 时 CF 与 VPS 之间的中间人。
+过 CDN 时外层 TLS 终结在 CF 边缘，CF 解密后能看到内层 VLESS 明文。纯 VLESS 自身不加密，能读到明文的包括 CF 本身，以及回源段若非 Full (strict) 时 CF 与 VPS 之间的中间人。
 
 `VLESS Encryption` 在 VLESS 内层端到端认证加密，独立于外层 TLS 与公共 CA 体系，客户端预置服务端静态公钥（X25519 或 ML-KEM-768），每条连接做临时密钥交换，兼具前向安全与后量子安全；载荷走 AES-256-GCM / ChaCha20-Poly1305，即使 CF 或链路上任何人拿着有效证书 MITM 掉外层 TLS，没有服务端静态私钥也无法伪造内层握手和读取内容。
 
@@ -972,14 +972,13 @@ paddingGaps = [][3]int{{75, 0, 111}}
 **注意：**
 
 - 下文的 [ECH](#ech-加密) 加密的是 SNI，属于防探测/隐私手段，不防 MITM
-- 端到端加密是在 TLS 之上再叠一层加密，会多一份 CPU 与握手开销
 - REALITY 本身已在同一条直连链路上做了服务端认证与端到端加密，无需另外设置
 - 裸跑（`security: "none"`） 抗不住熵检测与主动探测，不要这样做
 - 只要 TLS 终结在你不完全信任的中间盒，VLESS Encryption 就有意义
 
 ### ECH 加密
 
-CF 面板开启 ECH 后，客户端在 `tlsSettings` 加 `echConfigList` 即可加密 SNI。格式为 `"域名+DNS服务器"`，服务器支持 `https://`（DoH）、`h2c://`、`udp://` 三种：
+域名开启 ECH 后，客户端设置 `tlsSettings.echConfigList` 即可加密 SNI。格式为 `"域名+DNS服务器"`，服务器支持 `https://`（DoH）、`h2c://`、`udp://` 三种：
 
 ```json title="客户端"
 "tlsSettings": {
@@ -989,9 +988,9 @@ CF 面板开启 ECH 后，客户端在 `tlsSettings` 加 `echConfigList` 即可�
 }
 ```
 
-不写域前缀时按 `serverName` 查询；写成 `域名+DNS服务器` 则强制查这个域名的 HTTPS(TYPE65) 记录取 ECHConfig。查询本身对该 DNS 服务器是可见的，彻底隐藏需使用 base64 的 ECHConfigList。
+不写域前缀时按 `serverName` 查询，写成 `域名+DNS服务器` 则强制查该域名的 HTTPS(TYPE65) 记录取 ECHConfig。查询本身对该 DNS 服务器是可见的，彻底隐藏需使用 base64 的 ECHConfigList。
 
-### 证书：ACME DNS-01 与 CF Origin CA
+## 证书：ACME DNS-01 与 CF Origin CA
 
 cf1/cf2 同属一个 zone，签一张 `*.domain.com`（可加主域）的通配符即可：
 
@@ -1002,7 +1001,7 @@ cf1/cf2 同属一个 zone，签一张 `*.domain.com`（可加主域）的通配�
 | 谁信任   | 所有浏览器/系统        | 只有 CF              |
 | 额外依赖 | acme.sh + token 存 VPS | 无                   |
 
-#### ACME DNS-01 证书
+### ACME DNS-01 证书
 
 登录 Cloudflare 获取 Cloudflare API Token
 
@@ -1036,7 +1035,7 @@ chmod +r ~/xray_cert/xray.key   # Xray 非 root 运行时
 
 acme.sh 自带每日 cron，自动续期并重新执行 install-cert，Xray 默认热重载证书。
 
-#### CF Origin CA 证书
+### CF Origin CA 证书
 
 只有 CF 信任，15 年免续：
 
@@ -1056,8 +1055,8 @@ chmod +r ~/xray_cert/xray.crt
 
 ## 注意事项
 
-- packet-up 和 `Referer` 长 padding 会刷出大量长日志，建议在反代软件里指定不记录；开启请求混淆后也可让日志形态不再扎眼
-- `address` 填优选 IP 时 `serverName` 必填，且 IP 不能当 SNI，留空则无 SNI 扩展，CF 会拒
+- packet-up 和 `Referer` 长 padding 会刷出大量长日志，建议在反代软件里指定不记录；使用请求混淆也可让日志形态不再扎眼
+- `address` 填优选 IP 时 `serverName` 必填，且 IP 不能当 SNI
 - v26.7.11 起 REALITY 服务端在 `minClientVer` 留空时默认为 26.3.27，其他内核和旧客户端会被静默拒连，不建议降低 `minClientVer` 放行，也不要让客户端发出非正常的 ClientHello
-- v26.9.8 起 REALITY 服务端取消 `minClientVer` 限制并强制 ClientHello 携带 X25519MLKEM768，奇怪和过时的指纹会直接被当回落流量处理
-- XHTTP 目前只有 Xray 原生支持，sing-box 主线尚未内置，但有社区 fork 支持，Mihomo 自 2026 年 3 月（约 v1.19.22）起支持 `xhttp-opts`；不少订阅转换工具会把 XHTTP 的部分字段静默丢弃，使用中需留意
+- v26.9.8 起 REALITY 服务端移除 `minClientVer` 限制并强制要求 ClientHello 携带 X25519MLKEM768，奇怪和过时的指纹会直接被当回落流量处理
+- XHTTP 目前只有 Xray 原生支持；sing-box 主线尚未内置，有社区 fork 支持；Mihomo 自 2026 年 3 月（约 v1.19.22）起支持 `xhttp-opts`。一些订阅转换工具会把 XHTTP 的某些字段静默丢弃，实践中需留意
