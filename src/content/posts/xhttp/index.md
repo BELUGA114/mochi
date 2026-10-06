@@ -1,6 +1,7 @@
 ---
 title: XHTTP 原理、配置字段与玩法
 published: 2026-08-13
+updated: 2026-10-02
 description: 对 XHTTP 官方文档和社区讨论以及源码的研读与实践：三种模式、XMUX 与请求混淆的取舍，过 CF 与 Nginx 前置以及上下行分离、Browser Dialer、FinalMask 混搭等玩法。
 image: ""
 tags: [VPS, Xray, XHTTP, REALITY, Cloudflare]
@@ -951,7 +952,7 @@ paddingLens = [][3]int{{100, 111, 1111}, {50, 0, 3333}}
 paddingGaps = [][3]int{{75, 0, 111}}
 ```
 
-配置模板：
+配置示例：
 
 ```json title="服务端"
 "settings": {
