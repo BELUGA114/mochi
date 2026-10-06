@@ -50,8 +50,13 @@ nearest declaring ancestor. Defaults (`WALLPAPER_OVERLAY_DEFAULT`, `WALLPAPER_CA
 `src/constants/constants.ts`.
 
 Cards also get a frosted-glass treatment in the same style block: `body.enable-wallpaper .card-base` /
-`.float-panel` add `backdrop-filter` blur + saturate, a 1px light border, and a soft shadow (the dark card
-base is tinted `rgba(18,18,26,…)` rather than pure black). The homepage list wrapper in `PostPage.astro`
+`.btn-card` / `.float-panel` add `backdrop-filter` blur + saturate, a 1px light border, and a soft shadow (the
+dark card base is tinted `rgba(18,18,26,…)` rather than pure black). `.btn-card` is in that list because its
+background is the same `--card-bg` (see `src/styles/main.css`) — without the rule it stays translucent but
+unblurred, which reads as "transparent" rather than glass; that was the post prev/next buttons. It is a
+shared class, so the treatment also lands on back-to-top, homepage pagination and the wallpaper toggle.
+
+The homepage list wrapper in `PostPage.astro`
 carries no surface of its own (transparent at every breakpoint, card gaps via `gap-4`) so the per-card glass
 is the only translucent layer — a second translucent layer there would stack with the cards' own background
 and crush the wallpaper to ~5% visibility. The TOC gets a lighter glass rail on post pages, gated on

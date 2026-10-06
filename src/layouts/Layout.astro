@@ -247,14 +247,18 @@ const bannerOffset =
 		--float-panel-bg: rgba(22, 22, 32, 0.86);
 	}
 
-	/* 毛玻璃：模糊 + 提饱和 + 细边框 + 柔和阴影（数值取自参考站，浮层用更强一档的模糊） */
-	body.enable-wallpaper .card-base {
+	/* 毛玻璃：模糊 + 提饱和 + 细边框 + 柔和阴影（数值取自参考站，浮层用更强一档的模糊）。
+	   .btn-card 的底色同样是 --card-bg（见 main.css），属于同一族卡片表面，必须一起加玻璃：
+	   否则它透着壁纸却没有模糊，看上去就是"透明"的（文章页的上/下一篇按钮即此）。 */
+	body.enable-wallpaper .card-base,
+	body.enable-wallpaper .btn-card {
 		border: 1px solid rgba(255, 255, 255, 0.7);
 		box-shadow: 0 8px 30px rgba(0, 0, 0, 0.04);
 		backdrop-filter: blur(20px) saturate(180%);
 		-webkit-backdrop-filter: blur(20px) saturate(180%);
 	}
-	html.dark body.enable-wallpaper .card-base {
+	html.dark body.enable-wallpaper .card-base,
+	html.dark body.enable-wallpaper .btn-card {
 		border-color: rgba(255, 255, 255, 0.12);
 		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.36);
 	}
