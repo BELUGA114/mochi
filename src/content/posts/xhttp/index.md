@@ -895,9 +895,9 @@ XHTTP H3 无协商机制，不支持 `brutal`，只能用免协商的 `force-bru
 
 端口跳跃在 v26.9.9 从 `quicParams.udpHop` 挪到了 `finalmask.udp` 下，字段从 `ports` 改为 `remotePorts` 且必须显式指定 `mode`：
 
-- `intervalRemote`：周期换远端端口，底层 socket 和本地源端口不动，最经典的端口跳跃
-- `intervalLocal`：周期换本地源端口，跳跃点新开本地 UDP socket
-- `perConnRemote`：每条连接定一次，之后整条连接固定不变
+- "intervalRemote"：周期换远端端口，底层 socket 和本地源端口不动，最经典的端口跳跃
+- "intervalLocal"：周期换本地源端口，跳跃点新开本地 UDP socket
+- "perConnRemote"：每条连接定一次，之后整条连接固定不变
 
 老写法在新版会被静默丢弃；服务端要让被跳到的整段端口都能到达 QUIC 监听端口，一般在 nftables/iptables 对端口段进行重定向。
 
@@ -923,51 +923,94 @@ CF 面板可选设置 Cache Rules，按 CDN 主机名或 XHTTP path 匹配、缓
 
 `VLESS Encryption` 在 VLESS 内层端到端认证加密，独立于外层 TLS 与公共 CA 体系，客户端预置服务端静态公钥（X25519 或 ML-KEM-768），每条连接做临时密钥交换，兼具前向安全与后量子安全；载荷走 AES-256-GCM / ChaCha20-Poly1305，即使 CF 或链路上任何人拿着有效证书 MITM 掉外层 TLS，没有服务端静态私钥也无法伪造内层握手和读取内容。
 
-执行 `xray vlessenc` 生成配对的 `decryption`/`encryption`，输出含 X25519 与 ML-KEM-768 两版，二选一不要混用（握手本身两者都后量子安全，ML-KEM-768 版额外能防客户端参数泄露后被未来量子计算机破解出私钥冒充服务端）
+执行 `xray vlessenc` 生成配对的 decryption/encryption，输出含 X25519 与 ML-KEM-768 两版，二选一不要混用（握手本身两者都后量子安全，ML-KEM-768 版额外能防客户端参数泄露后被未来量子计算机破解出私钥冒充服务端）
 
 配置串以 `.` 分块:
 
 ```json
-"mlkem768x25519plus.<mode>.<rtt>.<...>.(padding len).(padding gap)...(X25519 PrivateKey).(ML-KEM-768 Seed)..."
+"mlkem768x25519plus.<mode>.<rtt>.<padding...>.<key>[.<key>...]"
 ```
 
 `mlkem768x25519plus` 为握手方式，`<mode>` 为流量外观：
 
-- `native`：头部有公钥特征，流量为 TLSv1.3 的 `23 3 3 l>>8 l` AEAD 头特征
-- `xorpub`：头部无公钥特征，流量同上
-- `random`：全随机数加密
+- "native"：头部有公钥特征，流量为 TLSv1.3 的 `23 3 3 l>>8 l` AEAD 头特征
+- "xorpub"：头部无公钥特征，流量同上
+- "random"：全随机数加密
 
 `<rtt>` 服务端为 0-RTT 有效期如 `600s`（可写范围 `60-600s`，`0` 则关闭 0-RTT），客户端为 `0rtt`/`1rtt`。
 
-Padding 是可选的参数，仅作用于 1-RTT 以消除握手的长度特征，双端默认值均为 "100-111-1111.75-0-111.50-0-3333"：
+`<padding>` 是可选参数，仅作用于 1-RTT 以消除握手的长度特征，每个字段为 probability-from-to 三段式：
 
-1. 在 1-RTT client/server hello 后以 100% 的概率粘上随机 111 到 1111 字节的 padding
-2. 以 75% 的概率等待随机 0 到 111 毫秒（"probability-from-to"）
-3. 再次以 50% 的概率发送随机 0 到 3333 字节的 padding（若为 0 则不 Write()）
-
-服务端、客户端可以设置不同的 padding 参数，按 len、gap 的顺序无限串联，第一个 padding 需概率 100%、至少 35 字节
-
-```go title="common.go"
-paddingLens = [][3]int{{100, 111, 1111}, {50, 0, 3333}}
-paddingGaps = [][3]int{{75, 0, 111}}
+```
+<probability>-<from>-<to>
 ```
 
-配置示例：
+- `<probability>`：0–100 的百分比（实际命中率为 (probability+1)%）
+- `<from> / <to>`：左闭右开区间。len 类为字节数，gap 类为毫秒数
+
+字段按 len、gap 交替串联，以 `strings.Split(padding, ".")` 结果数组的下标判断，偶数（i%2 == 0）为 len，奇数（i%2 == 1）为 gap。
+
+双端默认值均为 "100-111-1111.75-0-111.50-0-3333"：
+
+1. "100-111-1111": 在 1-RTT client/server hello 后以 100% 的概率粘上随机 111 到 1111 字节的 padding
+2. "75-0-111": 以 75% 的概率等待随机 0 到 111 ms
+3. "50-0-3333": 再次以 50% 的概率发送随机 0 到 3333 字节的 padding（若为 0 则不 Write()）
+
+服务端、客户端可以设置不同的 padding 参数，按 len、gap 的顺序无限串联；padding 参数必须整体位于 key 之前。
+
+第一个 padding 需概率 100% 且 `<from>-<to>` 都 ≥ 18+17 = 35，所有 len 段最大值之和须 ≤ 18+65535 = 65553。
+
+`<key>` 为身份认证密钥，至少选择 1 个：
+
+- decryption: X25519 私钥(32B) | ML-KEM-768 种子(64B)
+- encryption: X25519 公钥(32B) | ML-KEM-768 封装密钥(1184B)
+
+支持多级 relay 密钥链，认证密钥块可重复。客户端按中继顺序依次列出链路上每一级的公钥或封装密钥，核心按这个顺序逐级完成身份认证，每一级都基于公私钥机制，且下一级被上一级加密绑定。
+
+客户端（出站 encryption）在 `<key>` 按中继顺序配置链路上每一级的密钥（即列出 N 个密钥，第 j 个是第 j 级节点的公钥或封装密钥），每一级独立完成一次身份认证。
+
+服务端（入站 decryption，即终止节点），只配置自己终止的级，通常就是一个密钥。中间节点转发时只剥离自己那一级，把剩余部分连同 iv 继续往下传，全程不解密流量。
+
+中间节点只配置自己的私钥以及下一级公钥的 hash32，并不解密流量。相邻两级通过一个 32 字节的 blake3 hash 绑定，发送方向第 j 级写入的是第 j+1 级公钥的 hash32，并用第 j 级协商出的密钥加密；第 j 级节点解出后与本地记录比对，不符合直接断连。
+
+例如对于一个三级密钥链 C → A → B → S：
+
+| 节点 | 需要配置的密钥 |
+| --- | --- |
+| C（客户端） | 3 个公钥，按 A、B、S 的顺序 |
+| A（中转） | 自己的私钥 + 下一级信息 |
+| B（中转） | 自己的私钥 + 下一级信息 |
+| S（服务端） | 1 个私钥 |
+
+级数直接决定握手长度：
+
+$L_{\text{relays}}=\sum_{i=1}^{n}\ell_i+32(n-1)$
+
+其中：
+
+- $L_r$: relays 长度  
+- $\ell_i$: 第 $i$ 级密钥材料长度  
+- $n$: 级数
+
+$P_h = \ell_{\mathrm{iv}} + L_r,\quad \ell_{\mathrm{iv}} = 16$
+
+其中：
+
+- $P_h$: 握手前缀长度  
+- $\ell_{\mathrm{iv}}$: iv 的长度，固定为 $16$ 字节  
+
+:::important
+Xray-core **尚未实现中转转发**。RPRX 曰："入站即出站，这个需要写代码来中转，Xray-core 暂无此功能"，计划在 vless-relay 项目中实现（[参考](https://github.com/XTLS/Xray-core/pull/5067#issuecomment-3233765726)）。即多级密钥链目前仅除 hash32 字段以外的格式支持，转发还尚未实现
+:::
+
+最短可用形式：
 
 ```json title="服务端"
-"settings": {
-  "users": [{ "id": "你的UUID" }],
-  "decryption": "mlkem768x25519plus.native.600s.私钥"
-}
+"decryption": "mlkem768x25519plus.native.600s.<X25519 Privatekey | ML-KEM-768 Seed>"
 ```
 
 ```json title="客户端"
-"settings": {
-  "address": "优选 IP",
-  "port": 443,
-  "id": "你的UUID",
-  "encryption": "mlkem768x25519plus.native.0rtt.公钥"
-}
+"encryption": "mlkem768x25519plus.native.0rtt.<X25519 PublicKey | ML-KEM-768 EncapsulationKey>"
 ```
 
 **注意：**
