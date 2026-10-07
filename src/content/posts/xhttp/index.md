@@ -1,7 +1,7 @@
 ---
 title: XHTTP 原理、配置字段与玩法
 published: 2026-08-13
-updated: 2026-10-02
+updated: 2026-10-05
 description: 对 XHTTP 官方文档和社区讨论以及源码的研读与实践：三种模式、XMUX 与请求混淆的取舍，过 CF 与 Nginx 前置以及上下行分离、Browser Dialer、FinalMask 混搭等玩法。
 image: ""
 tags: [VPS, Xray, XHTTP, REALITY, Cloudflare]
@@ -958,7 +958,7 @@ CF 面板可选设置 Cache Rules，按 CDN 主机名或 XHTTP path 匹配、缓
 
 服务端、客户端可以设置不同的 padding 参数，按 len、gap 的顺序无限串联；padding 参数必须整体位于 key 之前。
 
-第一个 padding 需概率 100% 且 `<from>-<to>` 都 ≥ 18+17 = 35，所有 len 段最大值之和须 ≤ 18+65535 = 65553。
+第一个 padding 概率必须为 100% 且 `<from>-<to>` 都必须 ≥ 18+17 = 35，所有 len 段最大值之和必须 ≤ 18+65535 = 65553。
 
 `<key>` 为身份认证密钥，至少选择 1 个：
 
@@ -1015,14 +1015,66 @@ Xray-core **尚未实现中转转发**。RPRX 曰："入站即出站，这个需
 
 **注意：**
 
-- 下文的 [ECH](#ech-加密) 加密的是 SNI，属于防探测/隐私手段，不防 MITM
 - REALITY 本身已在同一条直连链路上做了服务端认证与端到端加密，无需另外设置
 - 裸跑（`security: "none"`） 抗不住熵检测与主动探测，不要这样做
 - 只要 TLS 终结在你不完全信任的中间盒，VLESS Encryption 就有意义
 
 ### ECH 加密
 
-域名开启 ECH 后，客户端设置 `tlsSettings.echConfigList` 即可加密 SNI。格式为 `"域名+DNS服务器"`，服务器支持 `https://`（DoH）、`h2c://`、`udp://` 三种：
+ECH（Encrypted Client Hello）将 ClientHello 拆成内外两层，内层为真实域名，用 ECHConfig 内的 HPKE 公钥加密后置于 `encrypted_client_hello` 扩展；外层是 Decoy SNI。中间人因此无法得知真实的 SNI。
+
+客户端启用 ECH 只需设置 `tlsSettings.echConfigList`，有两种形式：
+
+| 形式           | 写法                                         | 特点                                         |
+| -------------- | -------------------------------------------- | -------------------------------------------- |
+| 固定 ECHConfig | base64 的 ECHConfigList                      | 无额外查询，服务端轮换密钥后需手动同步客户端 |
+| DNS 查询       | `"cf1.domain.com+https://1.1.1.1/dns-query"` | 自动跟随轮换，按记录 TTL 缓存                |
+
+#### 固定 ECHConfig
+
+不依赖 DNS 服务器，执行 `xray tls ech` 生成：
+
+```shell
+xray tls ech --serverName domain.com           # 外层 SNI，输出 ECH config list 与 ECH server keys
+xray tls ech --pem                             # 输出 PEM
+xray tls ech -i "<ECH server keys>"            # 丢失 config list 可由 server keys 反推
+```
+
+```json title="服务端"
+"tlsSettings": {
+  "serverName": "domain.com",
+  "certificates": [
+    { "certificateFile": "/home/vpsadmin/xray_cert/xray.crt", "keyFile": "/home/vpsadmin/xray_cert/xray.key" }
+  ],
+  "echServerKeys": "<ECH server keys>"
+}
+```
+
+```json title="客户端"
+"tlsSettings": {
+  "serverName": "domain.com",
+  "echConfigList": "<ECH config list>"
+}
+```
+
+ECH 命中时客户端用内层 ClientHello 的域名（即 `serverName`）验证服务端证书，所以服务端证书必须包含内层域名；服务端配置 ECH 后仍然接受非 ECH 连接。
+
+:::note
+根据 [RFC 9849 6.1.7](https://www.rfc-editor.org/rfc/rfc9849.html#section-6.1.7) 的要求，服务端拒绝 ECH（如密钥轮换，客户端配置过期）时，握手改用明文的 Decoy SNI 继续，此时需要使用 Decoy SNI 的证书；
+
+**所以从规范层面来讲**，若服务端未持有外层 SNI 的证书，降级路径必然失败。**但实际上**，uTLS/Go 在 ECH 被拒时会直接报 tls: server rejected ECH 终止连接，不进行 retry_configs 重试，所以对 Xray 而言，外层 SNI 可以任意选择合理的域名。
+:::
+
+#### DNS 查询
+
+CF 的 Decoy SNI 固定是 `cloudflare-ech.com`，所有启用 ECH 的站点共用。开启 ECH 后域名的 HTTPS(TYPE65) 记录里会多出 `ech=` 字段：
+
+```shell
+dig +short HTTPS cf1.domain.com
+# 1 . alpn="h2,h3" ipv4hint=... ech="AEX+DQBB..."
+```
+
+Xray 会通过 HTTPS 记录动态获取其配置的 ECHConfig，DNS服务器仅支持 https://（DoH）、h2c://、udp:// 三种：
 
 ```json title="客户端"
 "tlsSettings": {
@@ -1032,7 +1084,30 @@ Xray-core **尚未实现中转转发**。RPRX 曰："入站即出站，这个需
 }
 ```
 
-不写域前缀时按 `serverName` 查询，写成 `域名+DNS服务器` 则强制查该域名的 HTTPS(TYPE65) 记录取 ECHConfig。查询本身对该 DNS 服务器是可见的，彻底隐藏需使用 base64 的 ECHConfigList。
+`域名+DNS服务器` 其中前缀是"指定该域名用于查询 ECHConfig"，不写前缀时按 `serverName` 或 `address`（如果 SNI 为空且目标为一个域名）查询；通常用于将查询域名与目标域名分开（比如你想从 DNS 获取 ECHConfig 但又不想暴露自己在查询这个域名的 HTTPS 记录或者在这个域名下发布 HTTPS 记录时）。
+
+Xray 遵守 DNS 下发的 TTL；首次同步阻塞查询，过期不足 4 小时使用旧值连接、后台 goroutine 异步刷新，过期超过 4 小时同步阻塞刷新。
+
+CF 轮换 ECH 密钥很快（记录 TTL 约 5 小时），一旦解析器的记录滞后，就会拿过期的 ECHConfig 去握手，导致 `tls: server rejected ECH`，需留意。
+
+当查询失败或 base64 解不开时，Xray 会使用非法 ECHConfig 让握手必然失败，不会造成 SNI 泄露。
+
+echSockopt 作用于 ECH 查询的连接；连接使用 `internet.DialSystem`，不经过路由规则和出站，可用 sockopt 自身的 `dialerProxy` 指定 tag 出站：
+
+```json title="客户端"
+"tlsSettings": {
+  "serverName": "cf1.domain.com",
+  "echConfigList": "https://1.1.1.1/dns-query",
+  "echSockopt": { "dialerProxy": "proxy" }
+}
+```
+
+**注意：**
+
+- ECH 仅抵御基于 SNI 的识别与封锁，不防 MITM
+- ECH 只对 `security: "tls"` 有意义
+- 如果配置了 `minVersion`，其值必须为 `1.3`
+- 不要再为 ECH 配置 `fingerprint: "unsafe"` 了，早期 utls 的 [BUG](https://github.com/XTLS/Xray-core/pull/3813#issuecomment-2850168051) 已经修复了
 
 ## 证书：ACME DNS-01 与 CF Origin CA
 
